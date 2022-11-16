@@ -1,4 +1,4 @@
-/* * Data converted from C:/Users/raulp/OneDrive/Escritorio/ServidorHttpsConADCymqtteI2Ctest/simple/build/esp-idf/mbedtls/x509_crt_bundle
+/* * Data converted from C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple/build/esp-idf/mbedtls/x509_crt_bundle
  */
 .data
 .section .rodata.embedded

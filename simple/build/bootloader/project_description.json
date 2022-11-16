@@ -1,8 +1,8 @@
 {
     "project_name":       "bootloader",
     "project_path":       "C:/Espressif/frameworks/esp-idf-v4.4.1/components/bootloader/subproject",
-    "build_dir":          "C:/Users/raulp/OneDrive/Escritorio/ServidorHttpsConADCymqtteI2Ctest/simple/build/bootloader",
-    "config_file":        "C:/Users/raulp/OneDrive/Escritorio/ServidorHttpsConADCymqtteI2Ctest/simple/sdkconfig",
+    "build_dir":          "C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple/build/bootloader",
+    "config_file":        "C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple/sdkconfig",
     "config_defaults":    "",
     "app_elf":            "bootloader.elf",
     "app_bin":            "bootloader.bin",
