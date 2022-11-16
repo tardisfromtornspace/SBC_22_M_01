@@ -347,6 +347,11 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     strcat(mensaje, voltajeAqua);
     strcat(mensaje, finEncabezado);
 
+    char i2cA[20];
+    itoa(data[0], i2cA, 10);
+    strcat(mensaje, i2cA);
+    strcat(mensaje, finEncabezado);
+
     mess = strcat(mensaje, finDePagina);
     if (s_reset_state != 0)
     {
