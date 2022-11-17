@@ -63,6 +63,8 @@
 
 // Para I2C
 #include "driver/i2c.h"
+// Para i2c test
+#include "cmd_i2ctools.h"
 
 //Para mensajes genéricos
 #include <string.h>
@@ -639,8 +641,10 @@ void app_main(void)
     configure_switch();
     configure_analog();
 
-    ESP_ERROR_CHECK(i2c_master_init());
-    ESP_LOGI(TAG, "I2C initialized successfully");
+    register_i2ctools();
+
+    //ESP_ERROR_CHECK(i2c_master_init());
+    //ESP_LOGI(TAG, "I2C initialized successfully");
 
     esp_err_t ret = ESP_OK;
     uint32_t voltage = 0;
@@ -777,8 +781,14 @@ void app_main(void)
         //Delays para asegurar lecturas ADC correctas
         vTaskDelay(pdMS_TO_TICKS(2000));
         /* Read the MPU9250 WHO_AM_I register, on power up the register should have the value 0x71 */
-        ESP_ERROR_CHECK(mpu9250_register_read(MPU9250_WHO_AM_I_REG_ADDR, data, 1));
-        ESP_LOGI(TAG, "WHO_AM_I = %X", data[0]);
+    //    ESP_ERROR_CHECK(mpu9250_register_read(MPU9250_WHO_AM_I_REG_ADDR, data, 1));
+    //    ESP_LOGI(TAG, "WHO_AM_I = %X", data[0]);
+
+        /* Demonstrate writing by reseting the MPU9250 */
+    //    ESP_ERROR_CHECK(mpu9250_register_write_byte(MPU9250_PWR_MGMT_1_REG_ADDR, 1 << MPU9250_RESET_BIT));
+
+    //    ESP_ERROR_CHECK(i2c_driver_delete(I2C_MASTER_NUM));
+    //    ESP_LOGI(TAG, "I2C unitialized successfully");
 
         //MQTT
         mqtt_app_start(); // Envio datos
