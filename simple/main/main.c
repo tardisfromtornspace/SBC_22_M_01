@@ -746,7 +746,7 @@ void app_main(void)
             ESP_LOGI(TAG_CH[0][0], "cali data: %d mV", voltage);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(1000)); // 1000
+        vTaskDelay(pdMS_TO_TICKS(2000)); // 1000
                                          // Espera
 
         // El WiFi usa en adc2 así que no lo podemos usar, mejor el adc1
@@ -775,7 +775,7 @@ void app_main(void)
         }
 
         //Delays para asegurar lecturas ADC correctas
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(2000));
         /* Read the MPU9250 WHO_AM_I register, on power up the register should have the value 0x71 */
         ESP_ERROR_CHECK(mpu9250_register_read(MPU9250_WHO_AM_I_REG_ADDR, data, 1));
         ESP_LOGI(TAG, "WHO_AM_I = %X", data[0]);
