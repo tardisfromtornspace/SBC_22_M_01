@@ -107,14 +107,50 @@ int voltajeSolar = 0; // Voltaje generado por los paneles
 #define MPU9250_PWR_MGMT_1_REG_ADDR         0x6B        /*!< Register addresses of the power managment register */
 #define MPU9250_RESET_BIT                   7
 
-uint8_t data[2]; // Para sensor I2C
+#define ACK_CHECK_EN 0x1            /*!< I2C master will check ack from slave*/
+#define ACK_CHECK_DIS 0x0           /*!< I2C master will not check ack from slave */
+#define ACK_VAL 0x0                 /*!< I2C ack value */
+#define NACK_VAL 0x1                /*!< I2C nack value */
+
+uint8_t data[2]; // Para sensor I2C lumen
 
 /**
  * @brief Read a sequence of bytes from a MPU9250 sensor registers
  */
 static esp_err_t mpu9250_register_read(uint8_t reg_addr, uint8_t *data, size_t len)
 {
-    return i2c_master_write_read_device(I2C_MASTER_NUM, MPU9250_SENSOR_ADDR, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
+    i2c_master_driver_initialize();
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, chip_addr << 1 | WRITE_BIT, ACK_CHECK_EN); // todo CHANGE CHIP ADDRESS THING
+    int i = 0; // TODO mover a var globales
+    int len = 2;
+    for (i = 0; i < len - 1; i++){ // Solo son 2 datos
+        i2c_master_read(cmd, data, len - 1, ACK_VAL);
+    }
+        i2c_master_read_byte(cmd, 1, NACK_VAL); // data + len - 1
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, 1000 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
+    if (ret == ESP_OK) {
+        for (int i = 0; i < len; i++) {
+            printf("0x%02x ", data[i]);
+            if ((i + 1) % 16 == 0) {
+                printf("\r\n");
+            }
+        }
+        if (len % 16) {
+            printf("\r\n");
+        }
+    } else if (ret == ESP_ERR_TIMEOUT) {
+        ESP_LOGW(TAG, "Bus is busy");
+    } else {
+        ESP_LOGW(TAG, "Read failed");
+    }
+    free(data);
+    i2c_driver_delete(i2c_port);
+    return 0;
+    // return i2c_master_write_read_device(I2C_MASTER_NUM, MPU9250_SENSOR_ADDR, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
 }
 
 /**
@@ -643,8 +679,8 @@ void app_main(void)
 
     //register_i2ctools();
 
-    //ESP_ERROR_CHECK(i2c_master_init());
-    //ESP_LOGI(TAG, "I2C initialized successfully");
+    ESP_ERROR_CHECK(i2c_master_init());
+    ESP_LOGI(TAG, "I2C initialized successfully");
 
     esp_err_t ret = ESP_OK;
     uint32_t voltage = 0;
@@ -709,7 +745,7 @@ void app_main(void)
         if (gpio_get_level(PIN_SWITCH))
         {
             s_switch_state = true;
-            ESP_LOGI(TAG, " Ehhh Tengo switch a ON");
+            ESP_LOGI(TAG, " Eh2 Tengo switch a ON");
         }
         else
         {
@@ -781,8 +817,8 @@ void app_main(void)
         //Delays para asegurar lecturas ADC correctas
         vTaskDelay(pdMS_TO_TICKS(2000));
         /* Read the MPU9250 WHO_AM_I register, on power up the register should have the value 0x71 */
-    //    ESP_ERROR_CHECK(mpu9250_register_read(MPU9250_WHO_AM_I_REG_ADDR, data, 1));
-    //    ESP_LOGI(TAG, "WHO_AM_I = %X", data[0]);
+        ESP_ERROR_CHECK(mpu9250_register_read(MPU9250_WHO_AM_I_REG_ADDR, data, 1));
+        ESP_LOGI(TAG, "Valor de data 0 = %X", data[0]);
 
         /* Demonstrate writing by reseting the MPU9250 */
     //    ESP_ERROR_CHECK(mpu9250_register_write_byte(MPU9250_PWR_MGMT_1_REG_ADDR, 1 << MPU9250_RESET_BIT));
