@@ -349,10 +349,10 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     strcat(mensaje, voltajeAqua);
     strcat(mensaje, finEncabezado);
 
-    char i2cA[20];
-    itoa(data[0], i2cA, 10);
-    strcat(mensaje, i2cA);
-    strcat(mensaje, finEncabezado);
+   // char i2cA[20];
+   // itoa(data[0], i2cA, 10);
+   // strcat(mensaje, i2cA);
+   // strcat(mensaje, finEncabezado);
 
     mess = strcat(mensaje, finDePagina);
     if (s_reset_state != 0)
@@ -641,7 +641,7 @@ void app_main(void)
     configure_switch();
     configure_analog();
 
-    register_i2ctools();
+    //register_i2ctools();
 
     //ESP_ERROR_CHECK(i2c_master_init());
     //ESP_LOGI(TAG, "I2C initialized successfully");
