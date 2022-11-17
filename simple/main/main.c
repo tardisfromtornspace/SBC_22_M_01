@@ -234,7 +234,7 @@ static void mqtt_app_start(void)
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "energiaSolar", voltajeSolar);      // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26
     cJSON_AddNumberToObject(root, "energiaHidraulica", voltajeHidro); // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
-    cJSON_AddNumberToObject(root, "temperaturaI2C", data[0]); // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
+    //cJSON_AddNumberToObject(root, "temperaturaI2C", data[0]); // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
     esp_mqtt_client_publish(client, "v1/devices/me/telemetry", post_data, 0, 1, 0); // En v1/devices/me/telemetry sale de la MQTT Device API Reference de ThingsBoard
@@ -709,7 +709,7 @@ void app_main(void)
         if (gpio_get_level(PIN_SWITCH))
         {
             s_switch_state = true;
-            ESP_LOGI(TAG, "Tengo switch a ON");
+            ESP_LOGI(TAG, " Ehhh Tengo switch a ON");
         }
         else
         {
