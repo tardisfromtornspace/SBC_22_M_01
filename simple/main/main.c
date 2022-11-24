@@ -64,7 +64,7 @@
 // Para I2C
 #include "driver/i2c.h"
 // Para i2c test
-#include "cmd_i2ctools.h"
+//#include "cmd_i2ctools.h"
 
 //Para mensajes genéricos
 #include <string.h>
@@ -89,6 +89,8 @@ int voltajeHidro = 0; // Voltaje generado por las turbinas
 
 int voltajeSolar = 0; // Voltaje generado por los paneles
 
+int datoI2CCO2legible = 0; // Concentracion de quimicos en el agua, usamos el sensor de CO2 como mock
+
 // Fin del LED
 
 // I2C
@@ -96,13 +98,13 @@ int voltajeSolar = 0; // Voltaje generado por los paneles
 #define I2C_MASTER_SCL_IO           CONFIG_I2C_MASTER_SCL      /*!< GPIO number used for I2C master clock */
 #define I2C_MASTER_SDA_IO           CONFIG_I2C_MASTER_SDA      /*!< GPIO number used for I2C master data  */
 #define I2C_MASTER_NUM              0                          /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
-#define I2C_MASTER_FREQ_HZ          400000                     /*!< I2C master clock frequency */
+#define I2C_MASTER_FREQ_HZ          100000                     /*!< I2C master clock frequency */
 #define I2C_MASTER_TX_BUF_DISABLE   0                          /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE   0                          /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_TIMEOUT_MS       1000
 
-#define MPU9250_SENSOR_ADDR                 0x68        /*!< Slave address of the MPU9250 sensor */
-#define MPU9250_WHO_AM_I_REG_ADDR           0x75        /*!< Register addresses of the "who am I" register */
+#define CO2_SENSOR_ADDR                 0xB5        /*!< Slave address of the CO2 sensor is 0x5A */
+#define CO2_REG_ADDR           0xB5        /*!< Register addresses of the CO2 lecture register */
 
 #define MPU9250_PWR_MGMT_1_REG_ADDR         0x6B        /*!< Register addresses of the power managment register */
 #define MPU9250_RESET_BIT                   7
@@ -112,25 +114,52 @@ int voltajeSolar = 0; // Voltaje generado por los paneles
 #define ACK_VAL 0x0                 /*!< I2C ack value */
 #define NACK_VAL 0x1                /*!< I2C nack value */
 
-uint8_t data[2]; // Para sensor I2C lumen
+static i2c_port_t i2c_master_port = I2C_MASTER_NUM;
+
+uint8_t data[7] = {0, 0, 0, 0, 0, 0, 0}; // Para sensor I2C CO2 - tomamos los 8 bytes pero solo necesitamos los 2 primeros
+uint8_t dataUltimo = 0;
+/**
+ * @brief i2c master initialization
+ */
+static esp_err_t i2c_master_init(void)
+{
+    //int i2c_master_port = I2C_MASTER_NUM;
+
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = I2C_MASTER_SDA_IO,
+        .scl_io_num = I2C_MASTER_SCL_IO,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = I2C_MASTER_FREQ_HZ,
+    };
+
+    // i2c_param_config(i2c_master_port, &conf);
+    return i2c_param_config(i2c_master_port, &conf);
+    //return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+}
 
 /**
- * @brief Read a sequence of bytes from a MPU9250 sensor registers
+ * @brief Read a sequence of bytes from a sensor register
  */
-static esp_err_t mpu9250_register_read(uint8_t reg_addr, uint8_t *data, size_t len)
+static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len) // , uint8_t *data
 {
-    i2c_master_driver_initialize();
+    i2c_driver_install(i2c_master_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+    ESP_ERROR_CHECK(i2c_master_init());
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-    i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, chip_addr << 1 | WRITE_BIT, ACK_CHECK_EN); // todo CHANGE CHIP ADDRESS THING
-    int i = 0; // TODO mover a var globales
-    int len = 2;
-    for (i = 0; i < len - 1; i++){ // Solo son 2 datos
-        i2c_master_read(cmd, data, len - 1, ACK_VAL);
-    }
-        i2c_master_read_byte(cmd, 1, NACK_VAL); // data + len - 1
+    ESP_ERROR_CHECK(i2c_master_start(cmd));
+    i2c_master_write_byte(cmd, slave_addr, ACK_CHECK_EN);
+    //int i = 0; // TODO mover a var globales
+    //for (i = 0; i < len - 1; i++){ // Solo son 2 datos
+    //    i2c_master_read_byte(cmd, &data[i], ACK_VAL);
+        //i2c_master_read(cmd, &data[i], len - 1, ACK_VAL);
+    //}
+    i2c_master_read(cmd, &data, len -1, ACK_VAL);
+    //i2c_master_read_byte(cmd, &dataUltimo, NACK_VAL); // &data[len-1]
+    // i2c_master_read_byte(cmd, &dataUltimo, NACK_VAL);
+    i2c_master_read(cmd, &dataUltimo, 1, NACK_VAL); // data + len - 1
     i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, 1000 / portTICK_RATE_MS);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_RATE_MS);
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK) {
         for (int i = 0; i < len; i++) {
@@ -147,10 +176,13 @@ static esp_err_t mpu9250_register_read(uint8_t reg_addr, uint8_t *data, size_t l
     } else {
         ESP_LOGW(TAG, "Read failed");
     }
-    free(data);
-    i2c_driver_delete(i2c_port);
-    return 0;
-    // return i2c_master_write_read_device(I2C_MASTER_NUM, MPU9250_SENSOR_ADDR, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
+    //free(data);
+    i2c_driver_delete(i2c_master_port);
+
+    datoI2CCO2legible = data[0] * 256 + data[1];
+    ESP_LOGI(TAG, "El CO2 me sale %X", datoI2CCO2legible);
+    return ESP_OK;
+    //return i2c_master_write_read_device(I2C_MASTER_NUM, CO2_SENSOR_ADDR, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
 }
 
 /**
@@ -161,31 +193,11 @@ static esp_err_t mpu9250_register_write_byte(uint8_t reg_addr, uint8_t data)
     int ret;
     uint8_t write_buf[2] = {reg_addr, data};
 
-    ret = i2c_master_write_to_device(I2C_MASTER_NUM, MPU9250_SENSOR_ADDR, write_buf, sizeof(write_buf), I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
+    ret = i2c_master_write_to_device(I2C_MASTER_NUM, CO2_SENSOR_ADDR, write_buf, sizeof(write_buf), I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
 
     return ret;
 }
 
-/**
- * @brief i2c master initialization
- */
-static esp_err_t i2c_master_init(void)
-{
-    int i2c_master_port = I2C_MASTER_NUM;
-
-    i2c_config_t conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = I2C_MASTER_SDA_IO,
-        .scl_io_num = I2C_MASTER_SCL_IO,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = I2C_MASTER_FREQ_HZ,
-    };
-
-    i2c_param_config(i2c_master_port, &conf);
-
-    return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
-}
 // Fin I2C
 
 // MQTT
@@ -270,7 +282,7 @@ static void mqtt_app_start(void)
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "energiaSolar", voltajeSolar);      // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26
     cJSON_AddNumberToObject(root, "energiaHidraulica", voltajeHidro); // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
-    //cJSON_AddNumberToObject(root, "temperaturaI2C", data[0]); // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
+    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible); // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
     esp_mqtt_client_publish(client, "v1/devices/me/telemetry", post_data, 0, 1, 0); // En v1/devices/me/telemetry sale de la MQTT Device API Reference de ThingsBoard
@@ -384,6 +396,12 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     itoa(voltajeHidro, voltajeAqua, 10);
     strcat(mensaje, voltajeAqua);
     strcat(mensaje, finEncabezado);
+
+    // TO-DO arreglar esto
+    //char co2Lectura[20];
+    //itoa(datoI2CCO2legible, co2Lectura, 10);
+    //strcat(mensaje, co2Lectura);
+    //strcat(mensaje, finEncabezado);
 
    // char i2cA[20];
    // itoa(data[0], i2cA, 10);
@@ -679,9 +697,6 @@ void app_main(void)
 
     //register_i2ctools();
 
-    ESP_ERROR_CHECK(i2c_master_init());
-    ESP_LOGI(TAG, "I2C initialized successfully");
-
     esp_err_t ret = ESP_OK;
     uint32_t voltage = 0;
     bool cali_enable = adc_calibration_init();
@@ -816,9 +831,17 @@ void app_main(void)
 
         //Delays para asegurar lecturas ADC correctas
         vTaskDelay(pdMS_TO_TICKS(2000));
-        /* Read the MPU9250 WHO_AM_I register, on power up the register should have the value 0x71 */
-        ESP_ERROR_CHECK(mpu9250_register_read(MPU9250_WHO_AM_I_REG_ADDR, data, 1));
+        /* Read the register, on power up the register should have the value 0xB5 */
+        ESP_LOGI(TAG, "Procedo a leer I2C de CO2");
+        ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9)); // data,
         ESP_LOGI(TAG, "Valor de data 0 = %X", data[0]);
+        ESP_LOGI(TAG, "Valor de data 1 = %X", data[1]);
+        ESP_LOGI(TAG, "Valor de data 2 = %X", data[2]);
+        ESP_LOGI(TAG, "Valor de data 3 = %X", data[3]);
+        ESP_LOGI(TAG, "Valor de data 4 = %X", data[4]);
+        ESP_LOGI(TAG, "Valor de data 5 = %X", data[5]);
+        ESP_LOGI(TAG, "Valor de data 6 = %X", data[6]);
+        ESP_LOGI(TAG, "Valor de data ultimo = %X", dataUltimo);
 
         /* Demonstrate writing by reseting the MPU9250 */
     //    ESP_ERROR_CHECK(mpu9250_register_write_byte(MPU9250_PWR_MGMT_1_REG_ADDR, 1 << MPU9250_RESET_BIT));
