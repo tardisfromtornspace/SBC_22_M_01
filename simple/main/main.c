@@ -66,7 +66,7 @@
 // Para i2c test
 //#include "cmd_i2ctools.h"
 
-//Para mensajes genéricos
+// Para mensajes genéricos
 #include <string.h>
 
 /* A simple example that demonstrates how to create GET and POST
@@ -78,6 +78,69 @@ static const char *TAG = "ServidorSimple";
 // LED
 #define PIN_SWITCH 35
 #define BLINK_GPIO CONFIG_BLINK_GPIO
+// Fin del LED
+
+// I2C nota: hemos elegido el 4 y el 0, puede que de incompatibilidades con otros módulos fuera de ESP32
+/*
+     GPIO num         RTC GPIO Num
+SCL: gpio4  Y gpio2   10 y 12
+SDA: gpio0  y MTDO    11 y 13
+
+EN LOS PINES NO PONGAIS DE 6 A 11 QUE ESOS SON DE LA FLASH
+*/
+
+#define I2C_MASTER_SCL_IO GPIO_NUM_4            /*!< GPIO number used for I2C master clock */
+#define I2C_MASTER_SDA_IO GPIO_NUM_15           /*!< GPIO number used for I2C master data  */
+#define I2C_MASTER_NUM I2C_NUM_0                /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
+#define I2C_MASTER_FREQ_HZ 100000               /*!< I2C master clock frequency */
+#define I2C_MASTER_TX_BUF_DISABLE 0             /*!< I2C master doesn't need buffer */
+#define I2C_MASTER_RX_BUF_DISABLE 0             /*!< I2C master doesn't need buffer */
+#define I2C_MASTER_TIMEOUT_MS 10000
+
+#define CO2_SENSOR_ADDR 0x5A /*!< Slave address of the CO2 sensor is 0x5A, when we add an additional binary 1 behind it transforms into 0xB5 */
+#define CO2_REG_ADDR 0x5A    /*!< Register addresses of the CO2 lecture register */
+
+#define LUZ_SENSOR_ADDR 0x10 /*Dir sensor luminosidad*/
+#define LUZ_REG_ADDR 0x04    /*Dir registro de luminosidad es 0x04*/
+
+#define MPU9250_PWR_MGMT_1_REG_ADDR 0x6B /*!< Register addresses of the power managment register */
+#define MPU9250_RESET_BIT 7
+
+#define READ_BIT I2C_MASTER_READ /*Para el sensor de CO2, sí es extraño*/
+#define WRITE_BIT I2C_MASTER_WRITE
+#define ACK_CHECK_EN 0x1  /*!< I2C master will check ack from slave*/
+#define ACK_CHECK_DIS 0x0 /*!< I2C master will not check ack from slave */
+#define ACK_VAL I2C_MASTER_ACK      /*!< I2C ack value */
+#define NACK_VAL I2C_MASTER_LAST_NACK //I2C_MASTER_NACK    /*!< I2C nack value */
+
+// ADC Channels
+#if CONFIG_IDF_TARGET_ESP32
+#define ADC1_EXAMPLE_CHAN0 ADC1_CHANNEL_6
+#define ADC2_EXAMPLE_CHAN0 ADC1_CHANNEL_4 // Usamos Wifi, no podemos usar el ADC2
+static const char *TAG_CH[2][10] = {{"ADC1_CH6"}, {"ADC2_CH0"}};
+#else
+#define ADC1_EXAMPLE_CHAN0 ADC1_CHANNEL_2
+#define ADC2_EXAMPLE_CHAN0 ADC2_CHANNEL_0
+static const char *TAG_CH[2][10] = {{"ADC1_CH2"}, {"ADC2_CH0"}};
+#endif
+
+#define PIN_ANALOG 34
+#define PIN_ANALOG2 32
+
+// ADC Attenuation
+#define ADC_EXAMPLE_ATTEN ADC_ATTEN_DB_11
+
+// ADC Calibration
+#if CONFIG_IDF_TARGET_ESP32
+#define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_VREF
+#elif CONFIG_IDF_TARGET_ESP32S2
+#define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_TP
+#elif CONFIG_IDF_TARGET_ESP32C3
+#define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_TP
+#elif CONFIG_IDF_TARGET_ESP32S3
+#define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_TP_FIT
+#endif
+// LEDes y algunos datos
 
 static uint8_t s_led_state = 0; // Estado del led
 
@@ -91,52 +154,99 @@ int voltajeSolar = 0; // Voltaje generado por los paneles
 
 int datoI2CCO2legible = 0; // Concentracion de quimicos en el agua, usamos el sensor de CO2 como mock
 
-// Fin del LED
+int datoI2CFotonlegible = 0; // Concentración de químicos en el algua filtrada, usamos el sensor de luz como mock
 
-// I2C
+// ADC
 
-#define I2C_MASTER_SCL_IO           CONFIG_I2C_MASTER_SCL      /*!< GPIO number used for I2C master clock */
-#define I2C_MASTER_SDA_IO           CONFIG_I2C_MASTER_SDA      /*!< GPIO number used for I2C master data  */
-#define I2C_MASTER_NUM              0                          /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
-#define I2C_MASTER_FREQ_HZ          100000                     /*!< I2C master clock frequency */
-#define I2C_MASTER_TX_BUF_DISABLE   0                          /*!< I2C master doesn't need buffer */
-#define I2C_MASTER_RX_BUF_DISABLE   0                          /*!< I2C master doesn't need buffer */
-#define I2C_MASTER_TIMEOUT_MS       1000
+static int adc_raw[2][10];
 
-#define CO2_SENSOR_ADDR                 0xB5        /*!< Slave address of the CO2 sensor is 0x5A */
-#define CO2_REG_ADDR           0xB5        /*!< Register addresses of the CO2 lecture register */
+static esp_adc_cal_characteristics_t adc1_chars;
+static esp_adc_cal_characteristics_t adc2_chars;
 
-#define MPU9250_PWR_MGMT_1_REG_ADDR         0x6B        /*!< Register addresses of the power managment register */
-#define MPU9250_RESET_BIT                   7
-
-#define ACK_CHECK_EN 0x1            /*!< I2C master will check ack from slave*/
-#define ACK_CHECK_DIS 0x0           /*!< I2C master will not check ack from slave */
-#define ACK_VAL 0x0                 /*!< I2C ack value */
-#define NACK_VAL 0x1                /*!< I2C nack value */
+// I2C CO2
 
 static i2c_port_t i2c_master_port = I2C_MASTER_NUM;
 
-uint8_t data[7] = {0, 0, 0, 0, 0, 0, 0}; // Para sensor I2C CO2 - tomamos los 8 bytes pero solo necesitamos los 2 primeros
-uint8_t dataUltimo = 0;
+uint8_t data[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0}; // Para sensor I2C CO2 - tomamos los 8 bytes pero solo necesitamos los 2 primeros
+
+// LEDes
+
+#ifdef CONFIG_BLINK_LED_RMT
+static led_strip_t *pStrip_a;
+
+static void blink_led(void)
+{
+    /* If the addressable LED is enabled */
+    if (s_led_state)
+    {
+        /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
+        pStrip_a->set_pixel(pStrip_a, 0, 16, 16, 16);
+        /* Refresh the strip to send data */
+        pStrip_a->refresh(pStrip_a, 100);
+    }
+    else
+    {
+        /* Set all LED off to clear all pixels */
+        pStrip_a->clear(pStrip_a, 50);
+    }
+}
+
+static void configure_led(void)
+{
+    ESP_LOGI(TAG, "Example configured to blink addressable LED!");
+    /* LED strip initialization with the GPIO and pixels number*/
+    pStrip_a = led_strip_init(CONFIG_BLINK_LED_RMT_CHANNEL, BLINK_GPIO, 1);
+    /* Set all LED off to clear all pixels */
+    pStrip_a->clear(pStrip_a, 50);
+}
+
+#elif CONFIG_BLINK_LED_GPIO
+
+static void blink_led(void)
+{
+    /* Set the GPIO level according to the state (LOW or HIGH)*/
+    gpio_set_level(BLINK_GPIO, s_led_state);
+}
+
+static void configure_led(void)
+{
+    ESP_LOGI(TAG, "Example configured to blink GPIO LED!");
+    gpio_reset_pin(BLINK_GPIO);
+    /* Set the GPIO as a push/pull output */
+    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+}
+
+#endif
+
+// Switch, se usará para encender o apagar el LCD
+static void configure_switch(void)
+{
+    ESP_LOGI(TAG, "Example configured to switch GPIO LED!");
+    gpio_reset_pin(PIN_SWITCH);
+    /* Set the GPIO 34 as a push/pull output */
+    gpio_set_direction(PIN_SWITCH, GPIO_MODE_INPUT);
+}
+
+// I2C TO-DO Comprobar con otro sensor de CO2
 /**
  * @brief i2c master initialization
  */
 static esp_err_t i2c_master_init(void)
 {
-    //int i2c_master_port = I2C_MASTER_NUM;
 
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
         .sda_io_num = I2C_MASTER_SDA_IO,
         .scl_io_num = I2C_MASTER_SCL_IO,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .sda_pullup_en = GPIO_PULLUP_DISABLE, //NO ENABLE porque las resistencias son externas
+        .scl_pullup_en = GPIO_PULLUP_DISABLE,
         .master.clk_speed = I2C_MASTER_FREQ_HZ,
+        .clk_flags = 0,
     };
 
-    // i2c_param_config(i2c_master_port, &conf);
-    return i2c_param_config(i2c_master_port, &conf);
-    //return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+    ESP_ERROR_CHECK(i2c_param_config(i2c_master_port, &conf));
+    ESP_ERROR_CHECK(i2c_driver_install(i2c_master_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, ESP_INTR_FLAG_LEVEL1)); // conf.mode
+    return ESP_OK;
 }
 
 /**
@@ -144,51 +254,169 @@ static esp_err_t i2c_master_init(void)
  */
 static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len) // , uint8_t *data
 {
-    i2c_driver_install(i2c_master_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
-    ESP_ERROR_CHECK(i2c_master_init());
+    // i2c_driver_install(i2c_master_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+    //   ESP_ERROR_CHECK(i2c_master_init());
+    /*
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     ESP_ERROR_CHECK(i2c_master_start(cmd));
-    i2c_master_write_byte(cmd, slave_addr, ACK_CHECK_EN);
-    //int i = 0; // TODO mover a var globales
-    //for (i = 0; i < len - 1; i++){ // Solo son 2 datos
-    //    i2c_master_read_byte(cmd, &data[i], ACK_VAL);
-        //i2c_master_read(cmd, &data[i], len - 1, ACK_VAL);
-    //}
-    i2c_master_read(cmd, &data, len -1, ACK_VAL);
-    //i2c_master_read_byte(cmd, &dataUltimo, NACK_VAL); // &data[len-1]
-    // i2c_master_read_byte(cmd, &dataUltimo, NACK_VAL);
-    i2c_master_read(cmd, &dataUltimo, 1, NACK_VAL); // data + len - 1
-    i2c_master_stop(cmd);
-    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_RATE_MS);
-    i2c_cmd_link_delete(cmd);
-    if (ret == ESP_OK) {
-        for (int i = 0; i < len; i++) {
+    //i2c_master_write_byte(cmd, 0xFF, ACK_CHECK_DIS); // POSSIBLE FIXUP FOR SOME FAULTY THINGS
+    ESP_ERROR_CHECK(i2c_master_start(cmd));
+    i2c_master_write_byte(cmd, (slave_addr << 1) |  READ_BIT, ACK_CHECK_EN); // En el datasheet dice no usar el bit write (slave_addr << 1) | READ_BIT,
+    int i = 0;
+    for (i = 0; i < len - 1; i++)
+    { // Solo son 2 datos
+        i2c_master_read_byte(cmd, &data[i], ACK_VAL);
+        // i2c_master_read(cmd, &data[i], len - 1, ACK_VAL);
+    }
+    i2c_master_read_byte(cmd, &data[len - 1], NACK_VAL);
+    */
+    //i2c_master_read(cmd, &data[len - 1], 1, NACK_VAL); // data + len - 1
+/*
+    esp_err_t espRc;
+
+	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, slave_addr << 1 | WRITE_BIT, ACK_CHECK_EN);
+
+	// Setup the read
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, icAddress << 1 | READ_BIT, ACK_CHECK_EN);
+	i2c_master_read_byte(cmd, data, NACK_VAL);
+	i2c_master_stop(cmd);
+
+	// Shoot it out
+	espRc = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_RATE_MS);
+	i2c_cmd_link_delete(cmd);
+*/
+    //i2c_master_stop(cmd);
+    //esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+    //i2c_cmd_link_delete(cmd);
+
+    esp_err_t ret = i2c_master_read_from_device(
+        I2C_MASTER_NUM,
+        slave_addr,
+        data,
+        len,
+        pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+    
+    if (ret == ESP_OK)
+    {
+        for (int i = 0; i < len; i++)
+        {
             printf("0x%02x ", data[i]);
-            if ((i + 1) % 16 == 0) {
+            if ((i + 1) % 16 == 0)
+            {
                 printf("\r\n");
             }
         }
-        if (len % 16) {
+        if (len % 16)
+        {
             printf("\r\n");
         }
-    } else if (ret == ESP_ERR_TIMEOUT) {
+    }
+    else if (ret == ESP_ERR_TIMEOUT)
+    {
         ESP_LOGW(TAG, "Bus is busy");
-    } else {
+    }
+    else
+    {
         ESP_LOGW(TAG, "Read failed");
     }
-    //free(data);
+    ESP_LOGI(TAG, "My ESP-CODE is %d", ret);
+    // free(data);
     i2c_driver_delete(i2c_master_port);
 
+    esp_log_buffer_hex(TAG, data, 9);
     datoI2CCO2legible = data[0] * 256 + data[1];
     ESP_LOGI(TAG, "El CO2 me sale %X", datoI2CCO2legible);
     return ESP_OK;
-    //return i2c_master_write_read_device(I2C_MASTER_NUM, CO2_SENSOR_ADDR, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
+
+    // return i2c_master_write_read_device(I2C_MASTER_NUM, slave_addr, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
+}
+
+static esp_err_t register_read_commando(uint8_t slave_addr, uint8_t reg_addr, size_t len) // , uint8_t *data
+{
+    /*
+    * El sensor de luminosidad tiene una forma curiosa de funcionar, en vez de enviar su dirección y luego el comando para leer, debes enviar su dirección con intención
+    * de escribir y luego envias la dirección el registro que quieres leer, tras ello envías de nuevo la dirección pero con la intención de leer, y ahora ya recibes los
+    * (2) byte(s) de respuesta
+    */
+    uint8_t dato[2] = {5, 7};
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    // Primero hacemos que el sensor nos lea el comando
+    ESP_ERROR_CHECK(i2c_master_start(cmd));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) |  WRITE_BIT, ACK_CHECK_EN));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN));
+    // Ahora le pedimos que nos de el valor asociado al comando
+    ESP_ERROR_CHECK(i2c_master_start(cmd));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) |  READ_BIT, ACK_CHECK_EN));
+
+    int i = 0;
+    for (i = 0; i < len - 1; i++)
+    {
+        ESP_ERROR_CHECK(i2c_master_read_byte(cmd, &dato[i], ACK_VAL));
+        ESP_LOGI(TAG, "Leo valor bien: %x", dato[i]);
+    }
+    ESP_ERROR_CHECK(i2c_master_read_byte(cmd, &dato[len - 1], NACK_VAL));
+    ESP_ERROR_CHECK(i2c_master_stop(cmd));
+
+    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+    i2c_cmd_link_delete(cmd);
+    ESP_LOGI(TAG, "Leo valor bien (tras lectura sale): %x", dato[0]);
+    if (ret == ESP_OK)
+    {
+        for (int i = 0; i < len; i++)
+        {
+            printf("0x%02x ", dato[i]);
+            if ((i + 1) % 16 == 0)
+            {
+                printf("\r\n");
+            }
+        }
+        if (len % 16)
+        {
+            printf("\r\n");
+        }
+    }
+    else if (ret == ESP_ERR_TIMEOUT)
+    {
+        ESP_LOGW(TAG, "Bus is busy");
+    }
+    else if (ret == ESP_ERR_INVALID_ARG)
+    {
+        ESP_LOGW(TAG, "Parameter error");
+    }
+    else if (ret == ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGW(TAG, "I2C driver not installed on not in master mode");
+    }
+    else if (ret == ESP_FAIL)
+    {
+        ESP_LOGW(TAG, "Command error, slave hasn't ACK the transfer");
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Read failed");
+    }
+    ESP_LOGI(TAG, "My ESP-CODE is %d", ret);
+    //i2c_driver_delete(i2c_master_port);
+
+    esp_log_buffer_hex(TAG, dato, 2);
+    datoI2CFotonlegible = dato[1] * 256 + dato[0];
+    //free(dato);
+    ESP_LOGI(TAG, "El Lumen me sale %X", datoI2CFotonlegible);
+    return ESP_OK;
+
+    // return i2c_master_write_read_device(I2C_MASTER_NUM, slave_addr, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
 }
 
 /**
  * @brief Write a byte to a MPU9250 sensor register
+ * TO-DO Ajustar para el Display
  */
-static esp_err_t mpu9250_register_write_byte(uint8_t reg_addr, uint8_t data)
+static esp_err_t display_register_write_byte(uint8_t reg_addr, uint8_t data)
 {
     int ret;
     uint8_t write_buf[2] = {reg_addr, data};
@@ -200,12 +428,11 @@ static esp_err_t mpu9250_register_write_byte(uint8_t reg_addr, uint8_t data)
 
 // Fin I2C
 
+// TO-DO ADAPTAR HITO 5 PARA QUE PUEDA ADMITIR EL TELEGRAM
+
 // MQTT
 esp_mqtt_client_config_t mqtt_cfg = {
-    //.uri =  "mqtt://iot.etsisi.upm.es",
-    //.uri =  "mqtt://mqtt.eclipseprojects.io",
-    //.uri =   "https://demo.thingsboard.io/" // Luego estoapi/v1/Y0kg9ua7tm6s4vaB0X1H/telemetry" ?
-    .uri = "mqtt://demo.thingsboard.io",
+    .uri = "mqtt://demo.thingsboard.io", // Luego estoapi/v1/Y0kg9ua7tm6s4vaB0X1H/telemetry" ?
     //.event_handle = mqtt_event_handler,
     .port = 1883,
     .username = "YSRNEFDXnyIGhX9OaylG", // token
@@ -215,10 +442,7 @@ esp_mqtt_client_handle_t client;
 
 static esp_err_t mqtt_event_handler_cb(esp_mqtt_event_handle_t event)
 {
-    // esp_mqtt_client_handle_t client = event->client;
-    // int msg_id;
-    // Los de arriba me dice que no están usados
-    // your_context_t *context = event->context;
+
     switch (event->event_id)
     {
     case MQTT_EVENT_CONNECTED:
@@ -259,30 +483,12 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 }
 static void mqtt_app_start(void)
 {
-
-    // Parámetros para la conexión
-    /*
-    esp_mqtt_client_config_t mqtt_cfg = {
-        //.uri =  "mqtt://iot.etsisi.upm.es",
-        //.uri =  "mqtt://mqtt.eclipseprojects.io",
-        //.uri =   "https://demo.thingsboard.io/" // Luego estoapi/v1/Y0kg9ua7tm6s4vaB0X1H/telemetry" ?
-        .uri = "mqtt://demo.thingsboard.io",
-        //.event_handle = mqtt_event_handler,
-        .port = 1883,
-        .username = "jeSK4atEMgZkSdwdPA5L", // token
-    };
-    */
-    // Establecer la conexión
-    // esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
-    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    // esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, client);
-    // esp_mqtt_client_start(client);
-
     // Crear json que se quiere enviar al ThingsBoard
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "energiaSolar", voltajeSolar);      // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26
-    cJSON_AddNumberToObject(root, "energiaHidraulica", voltajeHidro); // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
-    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible); // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
+    cJSON_AddNumberToObject(root, "energiaSolar", voltajeSolar);      // En la telemetría de Thingsboard aparecerá
+    cJSON_AddNumberToObject(root, "energiaHidraulica", voltajeHidro); // En la telemetría de Thingsboard aparecerá
+    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible);       // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
+    cJSON_AddNumberToObject(root, "luzI2C", datoI2CFotonlegible);     // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
     esp_mqtt_client_publish(client, "v1/devices/me/telemetry", post_data, 0, 1, 0); // En v1/devices/me/telemetry sale de la MQTT Device API Reference de ThingsBoard
@@ -291,38 +497,7 @@ static void mqtt_app_start(void)
     free(post_data);
 }
 
-// ADC Channels
-#if CONFIG_IDF_TARGET_ESP32
-#define ADC1_EXAMPLE_CHAN0 ADC1_CHANNEL_6
-#define ADC2_EXAMPLE_CHAN0 ADC1_CHANNEL_4 // Usamos Wifi, no podemos usar el ADC2
-static const char *TAG_CH[2][10] = {{"ADC1_CH6"}, {"ADC2_CH0"}};
-#else
-#define ADC1_EXAMPLE_CHAN0 ADC1_CHANNEL_2
-#define ADC2_EXAMPLE_CHAN0 ADC2_CHANNEL_0
-static const char *TAG_CH[2][10] = {{"ADC1_CH2"}, {"ADC2_CH0"}};
-#endif
-
-#define PIN_ANALOG 34
-#define PIN_ANALOG2 32
-
-// ADC Attenuation
-#define ADC_EXAMPLE_ATTEN ADC_ATTEN_DB_11
-
-// ADC Calibration
-#if CONFIG_IDF_TARGET_ESP32
-#define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_VREF
-#elif CONFIG_IDF_TARGET_ESP32S2
-#define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_TP
-#elif CONFIG_IDF_TARGET_ESP32C3
-#define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_TP
-#elif CONFIG_IDF_TARGET_ESP32S3
-#define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_TP_FIT
-#endif
-
-static int adc_raw[2][10];
-
-static esp_adc_cal_characteristics_t adc1_chars;
-static esp_adc_cal_characteristics_t adc2_chars;
+// ADC
 
 static bool adc_calibration_init(void)
 {
@@ -356,27 +531,27 @@ static bool adc_calibration_init(void)
 static esp_err_t root_get_handler(httpd_req_t *req)
 {
     char mensaje[] = "<h1> Servidor Web </h1>"
-                     "<h1> (Pagina principal, se refresca cada 10 segundos) </h1> <p><a href='/on'><button style='height:50px;width:100px'>ON</button></a></p> <p><a href='/off'><button style='height:50px;width:100px'>OFF</button></a></p><p><a href='/reset'><button style='height:50px;width:100px'>Resetear ESP32</button></a></p><h1>Estado del switch ";
+                     "<h1> (Refresh 10 segundos) </h1> <p><a href='/on'><button style='height:50px;width:100px'>ON</button></a></p> <p><a href='/off'><button style='height:50px;width:100px'>OFF</button></a></p><p><a href='/reset'><button style='height:50px;width:100px'>Resetear ESP32</button></a></p><h1>Display switch ";
     char onSWITCH[] = "ON</h1>";
     char offSWITCH[] = "OFF</h1>";
-    char voltajeSol[] = "<h1> Voltaje solar generado (mV): ";
-    char voltajeAgua[] = "<h1> Voltaje hidraulico generado (mV): ";
+    char voltajeSol[] = "<h1> V sol (mV): ";
+    char voltajeAgua[] = "<h1> V hidro (mV): ";
+    char filtroAntes[] = "<h1> Toxinas pre-filtro (ppm): "; // TO-DO
+    char filtroDespues[] = "<h1> Toxinas post-filtro (ppm): "; // TO-DO
     char finEncabezado[] = "</h1>";
     char reseteo[] = "<h>La ESP32 se va a resetear en ";
     char finDePagina[] = "";
 
     const char *mess;
 
-    //"<title>Servidor Especial</title><meta http-equiv='refresh' content='10'>";
+    // Esto es para refrescar cada 10 segundos, es la versión válida de "<title>Servidor Especial</title><meta http-equiv='refresh' content='10'>";
     httpd_resp_set_hdr(req, "Refresh", "10");
     httpd_resp_set_type(req, "text/html");
 
     if (s_switch_state == true)
     {
         ESP_LOGI(TAG, "Le digo que tengo switch a ON");
-        // strcat(mensaje, onSWITCH);
         strcat(mensaje, onSWITCH);
-        // httpd_resp_send(req, "<h1>Estado del switch ON</h1>", HTTPD_RESP_USE_STRLEN);
     }
     else
     {
@@ -385,28 +560,33 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     }
     strcat(mensaje, voltajeSol);
 
-    char voltajeSolecito[20];
+    char voltajeSolecito[sizeof(int)*8+1];
     itoa(voltajeSolar, voltajeSolecito, 10);
     strcat(mensaje, voltajeSolecito);
     strcat(mensaje, finEncabezado);
+    ESP_LOGI(TAG, "Le digo lo del sol");
 
     strcat(mensaje, voltajeAgua);
 
-    char voltajeAqua[20];
+    char voltajeAqua[sizeof(int)*8+1];
     itoa(voltajeHidro, voltajeAqua, 10);
     strcat(mensaje, voltajeAqua);
     strcat(mensaje, finEncabezado);
+    ESP_LOGI(TAG, "Le digo lo del agua");
 
-    // TO-DO arreglar esto
-    //char co2Lectura[20];
-    //itoa(datoI2CCO2legible, co2Lectura, 10);
+    // TO-DO arreglar extraño bug con el switch, causa que el núcelo entre en pánico si switch está a off y se trata de cambiar el LED
+    //strcat(mensaje, filtroAntes);
+
+    //char co2Lectura[sizeof(int)*8+1];
+    //itoa(datoI2CCO2legible , co2Lectura, 10);
     //strcat(mensaje, co2Lectura);
     //strcat(mensaje, finEncabezado);
 
-   // char i2cA[20];
-   // itoa(data[0], i2cA, 10);
-   // strcat(mensaje, i2cA);
-   // strcat(mensaje, finEncabezado);
+    //strcat(mensaje, filtroDespues);
+    //char lumenLectura[sizeof(int)*8+1];
+    //itoa(datoI2CCO2legible , lumenLectura, 10);
+    //strcat(mensaje, lumenLectura);
+    //strcat(mensaje, finEncabezado);
 
     mess = strcat(mensaje, finDePagina);
     if (s_reset_state != 0)
@@ -428,6 +608,7 @@ static esp_err_t buttON_get_handler(httpd_req_t *req)
 {
     ESP_LOGI(TAG, "Activo el LED");
     s_led_state = true;
+    blink_led();
     httpd_resp_set_hdr(req, "Location", "/");
     httpd_resp_set_status(req, "302");
     httpd_resp_set_type(req, "text/html");
@@ -442,6 +623,7 @@ static esp_err_t buttOFF_get_handler(httpd_req_t *req)
 {
     ESP_LOGI(TAG, "Desactivo el LED");
     s_led_state = false;
+    blink_led();
     httpd_resp_set_hdr(req, "Location", "/");
     httpd_resp_set_status(req, "302");
     httpd_resp_set_type(req, "text/html");
@@ -591,63 +773,7 @@ static void connect_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-// Blinking led
-
-#ifdef CONFIG_BLINK_LED_RMT
-static led_strip_t *pStrip_a;
-
-static void blink_led(void)
-{
-    /* If the addressable LED is enabled */
-    if (s_led_state)
-    {
-        /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-        pStrip_a->set_pixel(pStrip_a, 0, 16, 16, 16);
-        /* Refresh the strip to send data */
-        pStrip_a->refresh(pStrip_a, 100);
-    }
-    else
-    {
-        /* Set all LED off to clear all pixels */
-        pStrip_a->clear(pStrip_a, 50);
-    }
-}
-
-static void configure_led(void)
-{
-    ESP_LOGI(TAG, "Example configured to blink addressable LED!");
-    /* LED strip initialization with the GPIO and pixels number*/
-    pStrip_a = led_strip_init(CONFIG_BLINK_LED_RMT_CHANNEL, BLINK_GPIO, 1);
-    /* Set all LED off to clear all pixels */
-    pStrip_a->clear(pStrip_a, 50);
-}
-
-#elif CONFIG_BLINK_LED_GPIO
-
-static void blink_led(void)
-{
-    /* Set the GPIO level according to the state (LOW or HIGH)*/
-    gpio_set_level(BLINK_GPIO, s_led_state);
-}
-
-static void configure_led(void)
-{
-    ESP_LOGI(TAG, "Example configured to blink GPIO LED!");
-    gpio_reset_pin(BLINK_GPIO);
-    /* Set the GPIO as a push/pull output */
-    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
-}
-
-static void configure_switch(void)
-{
-    ESP_LOGI(TAG, "Example configured to switch GPIO LED!");
-    gpio_reset_pin(PIN_SWITCH);
-    /* Set the GPIO 34 as a push/pull output */
-    gpio_set_direction(PIN_SWITCH, GPIO_MODE_INPUT);
-}
-
-#endif
-
+// Volver a la partición de fábrica
 void backtofactory()
 {
     esp_partition_iterator_t pi;    // Iterator for find
@@ -676,6 +802,7 @@ void backtofactory()
     }
 }
 
+// Configuración de los dos pines analógicos
 static void configure_analog(void)
 {
     ESP_LOGI(TAG, "Configuring analog pins");
@@ -688,16 +815,27 @@ static void configure_analog(void)
     gpio_set_direction(PIN_ANALOG2, GPIO_MODE_INPUT);
 }
 
+// PROGRAMA PRINCIPAL
 void app_main(void)
 {
-    /* Configure the peripheral according to the LED type */
+    /*
+    * Configurar periféricos, LED, switch y los inputs analógicos
+    */
     configure_led();
     configure_switch();
     configure_analog();
 
-    //register_i2ctools();
+    // iniciar I2C
+    ESP_ERROR_CHECK(i2c_master_init());
+    ESP_LOGI(TAG, "I2C initialized successfully");
 
+    // Iniciar ADC
+#if CONFIG_IDF_TARGET_ESP32 // El WiFi usa en adc2 así que no podemos usar ese segundo módulo, mejor multiplexamos el adc1 y hay variables qur no necesitamos usar
+    ESP_LOGI(TAG, "Estamos en ESP-32");
+#else
     esp_err_t ret = ESP_OK;
+#endif
+
     uint32_t voltage = 0;
     bool cali_enable = adc_calibration_init();
 
@@ -708,7 +846,9 @@ void app_main(void)
     // ADC2 config
     ESP_ERROR_CHECK(adc2_config_channel_atten(ADC2_EXAMPLE_CHAN0, ADC_EXAMPLE_ATTEN));
 
-    /* Print chip information */
+    /*
+    * Informacion del chip
+    */
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
     printf("This is %s chip with %d CPU core(s), WiFi%s%s, ",
@@ -730,42 +870,51 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    /* Register event handlers to start server when Wi-Fi or Ethernet is connected,
-     * and stop server when disconnection happens.
+    /* 
+     * Registrar handlers de evento para montar el servidor cuando se conectan el Wi-Di o Ethernet, y parar cuando se desconecta.
      */
 
 #ifdef CONFIG_EXAMPLE_CONNECT_WIFI
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &connect_handler, &server));
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &disconnect_handler, &server));
-#endif // CONFIG_EXAMPLE_CONNECT_WIFI
+#endif
 #ifdef CONFIG_EXAMPLE_CONNECT_ETHERNET
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &connect_handler, &server));
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ETHERNET_EVENT_DISCONNECTED, &disconnect_handler, &server));
-#endif // CONFIG_EXAMPLE_CONNECT_ETHERNET
+#endif
 
     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
      * Read "Establishing Wi-Fi or Ethernet Connection" section in
      * examples/protocols/README.md for more information about this function.
      */
     ESP_ERROR_CHECK(example_connect());
-    // Establecer la conexión MQTT, creo cliente
+
+    /*
+    * Establecer la conexión MQTT, crearé al cliente
+    */
     client = esp_mqtt_client_init(&mqtt_cfg);
-    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
-    //esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, client);
     esp_mqtt_client_start(client);
 
+    // Task mqtt? TO-DO?
+    //  xTaskCreate(mqtt_app_start, "mqtt_send_data_0", 1024 * 2, (void *)0, 10, NULL);
+
+    // Task ADC? TO-DO?
+    // xTaskCreate(adc_app_loop, "adc_receive_data_0", 1024 * 2, (void *)0, 10, NULL);
+
+    /*
+    * Bucle infinito TO-DO mejorar con Tasks?
+    */ 
     while (1)
     {
-        blink_led();
         if (gpio_get_level(PIN_SWITCH))
         {
-            s_switch_state = true;
-            ESP_LOGI(TAG, " Eh2 Tengo switch a ON");
+            s_switch_state = true; // Este estado se usa para encender o apagar el LCD TO-DO El que se encargue del I2C que meta esto.
+            ESP_LOGI(TAG, "Switch display: ON");
         }
         else
         {
             s_switch_state = false;
-            ESP_LOGI(TAG, "Tengo switch a OFF");
+            ESP_LOGI(TAG, "Switch display: OFF");
         }
         if (s_reset_state != 0)
         {
@@ -801,22 +950,18 @@ void app_main(void)
             ESP_LOGI(TAG_CH[0][0], "cali data: %d mV", voltage);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(2000)); // 1000
-                                         // Espera
+        
+        vTaskDelay(pdMS_TO_TICKS(2000)); // Delays para asegurar lecturas ADC correctas
 
-        // El WiFi usa en adc2 así que no lo podemos usar, mejor el adc1
-
-#if CONFIG_IDF_TARGET_ESP32
+#if CONFIG_IDF_TARGET_ESP32 // El WiFi usa en adc2 así que no podemos usar ese segundo módulo, mejor multiplexamos el adc1
         adc_raw[1][0] = adc1_get_raw(ADC2_EXAMPLE_CHAN0);
 #else
         do
         {
             ret = adc2_get_raw(ADC2_EXAMPLE_CHAN0, ADC_WIDTH_BIT_DEFAULT, &adc_raw[1][0]);
         } while (ret == ESP_ERR_INVALID_STATE);
-        // ret = ESP_OK;
         ESP_ERROR_CHECK(ret);
 #endif
-
         ESP_LOGI(TAG_CH[1][0], "raw  data: %d", adc_raw[1][0]);
         if (cali_enable)
         {
@@ -829,28 +974,24 @@ void app_main(void)
             ESP_LOGI(TAG_CH[1][0], "cali data: %d mV", voltage);
         }
 
-        //Delays para asegurar lecturas ADC correctas
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(2000)); // Delays para asegurar lecturas ADC correctas
+
         /* Read the register, on power up the register should have the value 0xB5 */
-        ESP_LOGI(TAG, "Procedo a leer I2C de CO2");
-        ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9)); // data,
-        ESP_LOGI(TAG, "Valor de data 0 = %X", data[0]);
-        ESP_LOGI(TAG, "Valor de data 1 = %X", data[1]);
-        ESP_LOGI(TAG, "Valor de data 2 = %X", data[2]);
-        ESP_LOGI(TAG, "Valor de data 3 = %X", data[3]);
-        ESP_LOGI(TAG, "Valor de data 4 = %X", data[4]);
-        ESP_LOGI(TAG, "Valor de data 5 = %X", data[5]);
-        ESP_LOGI(TAG, "Valor de data 6 = %X", data[6]);
-        ESP_LOGI(TAG, "Valor de data ultimo = %X", dataUltimo);
-
+        // TO-DO ESP_LOGI(TAG, "Procedo a leer I2C de CO2");
+        // ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9));
+        ESP_LOGI(TAG, "Procedo a leer I2C de Luminosidad");
+        ESP_ERROR_CHECK(register_read_commando(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
+        
+        vTaskDelay(pdMS_TO_TICKS(1000)); // El I2C puede tardar hasta 11 segundos
         /* Demonstrate writing by reseting the MPU9250 */
-    //    ESP_ERROR_CHECK(mpu9250_register_write_byte(MPU9250_PWR_MGMT_1_REG_ADDR, 1 << MPU9250_RESET_BIT));
+        //    ESP_ERROR_CHECK(mpu9250_register_write_byte(MPU9250_PWR_MGMT_1_REG_ADDR, 1 << MPU9250_RESET_BIT));
 
-    //    ESP_ERROR_CHECK(i2c_driver_delete(I2C_MASTER_NUM));
-    //    ESP_LOGI(TAG, "I2C unitialized successfully");
+        //    ESP_ERROR_CHECK(i2c_driver_delete(I2C_MASTER_NUM));
+        //    ESP_LOGI(TAG, "I2C unitialized successfully");
 
-        //MQTT
-        mqtt_app_start(); // Envio datos
-        //fin
+        /*
+        *MQTT: los datos obtenidos los mandamos a Thingsboard
+        */
+        mqtt_app_start();
     }
 }
