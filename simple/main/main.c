@@ -155,10 +155,8 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 /* The HTTP/2 server to connect to */
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
-#define TELEGRAMTOKEN "5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
-#define CHATTOKEN "5983287334"
-//#define HTTP2_STREAMING_GET_PATH "/bot5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY/getUpdates?limit=5"
-#define HTTP2_STREAMING_GET_PATH "/bot5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY/getUpdates?limit=5"
+#define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define CHATTOKEN "CABMBIA POR EL TUYO"
 #define INIOFF "559291164"
 int ini_OFFSET = 0;                // El offset inicial TO-DO alterar con memoria guardada
 int last_msg_received = 559291163; // El último recibido TO-DO alterar con memoria guardada
@@ -901,15 +899,9 @@ static void http2_task(void *args)
         char str[256];
         offset = ini_OFFSET;
         printf("My offset es %d", offset);
-        sprintf(str, "/bot%s/getUpdates", TELEGRAMTOKEN); // sprintf(str, "/bot%s/getUpdates?offset=%d&limit=1", TELEGRAMTOKEN, offset);
-        // printf(str);
-        // ACÁ NO, HAZLAS EN EL ECHO offset += 1; // Aumento en 1 el offset
-        /* HTTP GET COMPRUEBO SI ME LLEGAN MENSAJES*/
+        sprintf(str, "/bot%s/getUpdates", TELEGRAMTOKEN);
         sh2lib_do_get(&hd, str, handle_get_response);
-        /*TO-DO temporizaciones */
-        //----
         /* HTTP GET  */
-        // correcto ->    sh2lib_do_get(&hd, GETUPDATES, handle_get_response); // HTTP2_STREAMING_GET_PATH TO-DO quita el GETUPDATES DE AHI
         while (1) // Ahora se pide ejecutar todo lo que se ponga arriba hasta que desconecte
         {
             /* Process HTTP2 send/receive */
