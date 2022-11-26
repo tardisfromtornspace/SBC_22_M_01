@@ -69,6 +69,13 @@
 // Para mensajes genéricos
 #include <string.h>
 
+// Para Telegram
+#include <stdlib.h>
+#include <sys/time.h>
+#include "lwip/apps/sntp.h"
+
+#include "sh2lib.h"
+
 /* A simple example that demonstrates how to create GET and POST
  * handlers and start an HTTPS server.
  */
@@ -89,12 +96,12 @@ SDA: gpio0  y MTDO    11 y 13
 EN LOS PINES NO PONGAIS DE 6 A 11 QUE ESOS SON DE LA FLASH
 */
 
-#define I2C_MASTER_SCL_IO GPIO_NUM_4            /*!< GPIO number used for I2C master clock */
-#define I2C_MASTER_SDA_IO GPIO_NUM_15           /*!< GPIO number used for I2C master data  */
-#define I2C_MASTER_NUM I2C_NUM_0                /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
-#define I2C_MASTER_FREQ_HZ 100000               /*!< I2C master clock frequency */
-#define I2C_MASTER_TX_BUF_DISABLE 0             /*!< I2C master doesn't need buffer */
-#define I2C_MASTER_RX_BUF_DISABLE 0             /*!< I2C master doesn't need buffer */
+#define I2C_MASTER_SCL_IO GPIO_NUM_4  /*!< GPIO number used for I2C master clock */
+#define I2C_MASTER_SDA_IO GPIO_NUM_15 /*!< GPIO number used for I2C master data  */
+#define I2C_MASTER_NUM I2C_NUM_0      /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
+#define I2C_MASTER_FREQ_HZ 100000     /*!< I2C master clock frequency */
+#define I2C_MASTER_TX_BUF_DISABLE 0   /*!< I2C master doesn't need buffer */
+#define I2C_MASTER_RX_BUF_DISABLE 0   /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_TIMEOUT_MS 10000
 
 #define CO2_SENSOR_ADDR 0x5A /*!< Slave address of the CO2 sensor is 0x5A, when we add an additional binary 1 behind it transforms into 0xB5 */
@@ -108,10 +115,10 @@ EN LOS PINES NO PONGAIS DE 6 A 11 QUE ESOS SON DE LA FLASH
 
 #define READ_BIT I2C_MASTER_READ /*Para el sensor de CO2, sí es extraño*/
 #define WRITE_BIT I2C_MASTER_WRITE
-#define ACK_CHECK_EN 0x1  /*!< I2C master will check ack from slave*/
-#define ACK_CHECK_DIS 0x0 /*!< I2C master will not check ack from slave */
-#define ACK_VAL I2C_MASTER_ACK      /*!< I2C ack value */
-#define NACK_VAL I2C_MASTER_LAST_NACK //I2C_MASTER_NACK    /*!< I2C nack value */
+#define ACK_CHECK_EN 0x1              /*!< I2C master will check ack from slave*/
+#define ACK_CHECK_DIS 0x0             /*!< I2C master will not check ack from slave */
+#define ACK_VAL I2C_MASTER_ACK        /*!< I2C ack value */
+#define NACK_VAL I2C_MASTER_LAST_NACK // I2C_MASTER_NACK    /*!< I2C nack value */
 
 // ADC Channels
 #if CONFIG_IDF_TARGET_ESP32
@@ -140,6 +147,28 @@ static const char *TAG_CH[2][10] = {{"ADC1_CH2"}, {"ADC2_CH0"}};
 #elif CONFIG_IDF_TARGET_ESP32S3
 #define ADC_EXAMPLE_CALI_SCHEME ESP_ADC_CAL_VAL_EFUSE_TP_FIT
 #endif
+// Telegram
+
+extern const uint8_t server_rootTelegram_cert_pem_start[] asm("_binary_http2_telegram_root_cert_pem_start");
+extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_telegram_root_cert_pem_end");
+
+/* The HTTP/2 server to connect to */
+#define HTTP2_SERVER_URI "https://api.telegram.org"
+/* A GET request that keeps streaming current time every second */
+#define TELEGRAMTOKEN "5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define CHATTOKEN "5983287334"
+//#define HTTP2_STREAMING_GET_PATH "/bot5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY/getUpdates?limit=5"
+#define HTTP2_STREAMING_GET_PATH "/bot5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY/getUpdates?limit=5"
+#define INIOFF "559291164"
+int ini_OFFSET = 0;                // El offset inicial TO-DO alterar con memoria guardada
+int last_msg_received = 559291163; // El último recibido TO-DO alterar con memoria guardada
+int extraOffset = 0;
+
+// DESCOMENTA static const char GETBOT[] = "/bot" TELEGRAMTOKEN "/";
+// static const char GETUPDATES[] = "/bot" TELEGRAMTOKEN "/getUpdates?limit=5";
+// static const char GETUPDATES[] = "/bot" TELEGRAMTOKEN "/getUpdates?offset=" INIOFF "&limit=1";
+static const char POSTUPDATES[] = "/bot" TELEGRAMTOKEN "/sendMessage?chat_id=" CHATTOKEN; // TO-DO hacer más dinamico para que no solo responda a uno todo el rato?
+
 // LEDes y algunos datos
 
 static uint8_t s_led_state = 0; // Estado del led
@@ -238,7 +267,7 @@ static esp_err_t i2c_master_init(void)
         .mode = I2C_MODE_MASTER,
         .sda_io_num = I2C_MASTER_SDA_IO,
         .scl_io_num = I2C_MASTER_SCL_IO,
-        .sda_pullup_en = GPIO_PULLUP_DISABLE, //NO ENABLE porque las resistencias son externas
+        .sda_pullup_en = GPIO_PULLUP_DISABLE, // NO ENABLE porque las resistencias son externas
         .scl_pullup_en = GPIO_PULLUP_DISABLE,
         .master.clk_speed = I2C_MASTER_FREQ_HZ,
         .clk_flags = 0,
@@ -270,28 +299,28 @@ static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len)
     }
     i2c_master_read_byte(cmd, &data[len - 1], NACK_VAL);
     */
-    //i2c_master_read(cmd, &data[len - 1], 1, NACK_VAL); // data + len - 1
-/*
-    esp_err_t espRc;
+    // i2c_master_read(cmd, &data[len - 1], 1, NACK_VAL); // data + len - 1
+    /*
+        esp_err_t espRc;
 
-	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
 
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, slave_addr << 1 | WRITE_BIT, ACK_CHECK_EN);
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, slave_addr << 1 | WRITE_BIT, ACK_CHECK_EN);
 
-	// Setup the read
-	i2c_master_start(cmd);
-	i2c_master_write_byte(cmd, icAddress << 1 | READ_BIT, ACK_CHECK_EN);
-	i2c_master_read_byte(cmd, data, NACK_VAL);
-	i2c_master_stop(cmd);
+        // Setup the read
+        i2c_master_start(cmd);
+        i2c_master_write_byte(cmd, icAddress << 1 | READ_BIT, ACK_CHECK_EN);
+        i2c_master_read_byte(cmd, data, NACK_VAL);
+        i2c_master_stop(cmd);
 
-	// Shoot it out
-	espRc = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_RATE_MS);
-	i2c_cmd_link_delete(cmd);
-*/
-    //i2c_master_stop(cmd);
-    //esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
-    //i2c_cmd_link_delete(cmd);
+        // Shoot it out
+        espRc = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_RATE_MS);
+        i2c_cmd_link_delete(cmd);
+    */
+    // i2c_master_stop(cmd);
+    // esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+    // i2c_cmd_link_delete(cmd);
 
     esp_err_t ret = i2c_master_read_from_device(
         I2C_MASTER_NUM,
@@ -299,7 +328,7 @@ static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len)
         data,
         len,
         pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
-    
+
     if (ret == ESP_OK)
     {
         for (int i = 0; i < len; i++)
@@ -331,27 +360,25 @@ static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len)
     datoI2CCO2legible = data[0] * 256 + data[1];
     ESP_LOGI(TAG, "El CO2 me sale %X", datoI2CCO2legible);
     return ESP_OK;
-
-    // return i2c_master_write_read_device(I2C_MASTER_NUM, slave_addr, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
 }
 
 static esp_err_t register_read_commando(uint8_t slave_addr, uint8_t reg_addr, size_t len) // , uint8_t *data
 {
     /*
-    * El sensor de luminosidad tiene una forma curiosa de funcionar, en vez de enviar su dirección y luego el comando para leer, debes enviar su dirección con intención
-    * de escribir y luego envias la dirección el registro que quieres leer, tras ello envías de nuevo la dirección pero con la intención de leer, y ahora ya recibes los
-    * (2) byte(s) de respuesta
-    */
+     * El sensor de luminosidad tiene una forma curiosa de funcionar, en vez de enviar su dirección y luego el comando para leer, debes enviar su dirección con intención
+     * de escribir y luego envias la dirección el registro que quieres leer, tras ello envías de nuevo la dirección pero con la intención de leer, y ahora ya recibes los
+     * (2) byte(s) de respuesta
+     */
     uint8_t dato[2] = {5, 7};
 
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     // Primero hacemos que el sensor nos lea el comando
     ESP_ERROR_CHECK(i2c_master_start(cmd));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) |  WRITE_BIT, ACK_CHECK_EN));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) | WRITE_BIT, ACK_CHECK_EN));
     ESP_ERROR_CHECK(i2c_master_write_byte(cmd, reg_addr, ACK_CHECK_EN));
     // Ahora le pedimos que nos de el valor asociado al comando
     ESP_ERROR_CHECK(i2c_master_start(cmd));
-    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) |  READ_BIT, ACK_CHECK_EN));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) | READ_BIT, ACK_CHECK_EN));
 
     int i = 0;
     for (i = 0; i < len - 1; i++)
@@ -401,11 +428,11 @@ static esp_err_t register_read_commando(uint8_t slave_addr, uint8_t reg_addr, si
         ESP_LOGW(TAG, "Read failed");
     }
     ESP_LOGI(TAG, "My ESP-CODE is %d", ret);
-    //i2c_driver_delete(i2c_master_port);
+    // i2c_driver_delete(i2c_master_port);
 
     esp_log_buffer_hex(TAG, dato, 2);
     datoI2CFotonlegible = dato[1] * 256 + dato[0];
-    //free(dato);
+    // free(dato);
     ESP_LOGI(TAG, "El Lumen me sale %X", datoI2CFotonlegible);
     return ESP_OK;
 
@@ -435,7 +462,7 @@ esp_mqtt_client_config_t mqtt_cfg = {
     .uri = "mqtt://demo.thingsboard.io", // Luego estoapi/v1/Y0kg9ua7tm6s4vaB0X1H/telemetry" ?
     //.event_handle = mqtt_event_handler,
     .port = 1883,
-    .username = "YSRNEFDXnyIGhX9OaylG", // token
+    .username = "YSRNEFDXnyIGhX9OaylG", // token MQTT TO-DO ¿Quitar?
 };
 
 esp_mqtt_client_handle_t client;
@@ -487,8 +514,9 @@ static void mqtt_app_start(void)
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "energiaSolar", voltajeSolar);      // En la telemetría de Thingsboard aparecerá
     cJSON_AddNumberToObject(root, "energiaHidraulica", voltajeHidro); // En la telemetría de Thingsboard aparecerá
-    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible);       // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
-    cJSON_AddNumberToObject(root, "luzI2C", datoI2CFotonlegible);     // En la telemetría de Thingsboard aparecerá temperature = counter y value = 26 TO-DO VERIFICAR
+    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible);       // En la telemetría de Thingsboard aparecerá lo sacado del I2C TO-DO VERIFICAR
+    cJSON_AddNumberToObject(root, "luzI2C", datoI2CFotonlegible);     // En la telemetría de Thingsboard aparecerá lo sacado del I2C TO-DO VERIFICAR
+    cJSON_AddNumberToObject(root, "botonDisplay", s_switch_state);    // En la telemetría de Thingsboard aparecerá como valor true/false TO-DO VERIFICAR
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
     esp_mqtt_client_publish(client, "v1/devices/me/telemetry", post_data, 0, 1, 0); // En v1/devices/me/telemetry sale de la MQTT Device API Reference de ThingsBoard
@@ -526,6 +554,379 @@ static bool adc_calibration_init(void)
 
     return cali_enable;
 }
+/*
+ * TELEGRAM
+ */
+int handle_echo_response(struct sh2lib_handle *handle, const char *data, size_t len, int flags)
+{
+    if (len)
+    {
+        printf("[echo-response] %.*s\n", len, data);
+        /*    // Sacamos el json de los datos
+            char auxData[len];
+            sprintf(auxData, "%.*s", len, data);
+
+            cJSON *root = cJSON_Parse(data);
+            if (cJSON_HasObjectItem(root, "ok"))
+            {
+                printf("Tengo un resultado\n");
+                if (cJSON_HasObjectItem(root, "result"))
+                {
+                    printf("Tengo un ACK\n");
+                    cJSON *parameters = cJSON_GetObjectItemCaseSensitive(root, "result");
+                    cJSON *parameter;
+                    cJSON_ArrayForEach(parameter, parameters)
+                    {
+                        // Each element is an object with unknown field(s)
+                        cJSON *elem;
+                        cJSON_ArrayForEach(elem, parameter)
+                        {
+                            if (strcmp(elem->string, "message") == 0)
+                            {
+                                printf("Mira si hay un ACK con message encontrado");
+                                cJSON *unMensaje = cJSON_GetObjectItemCaseSensitive(parameter, "message");
+                                if (cJSON_HasObjectItem(unMensaje, "message_id"))
+                                {
+
+                                    cJSON *elChat = cJSON_GetObjectItemCaseSensitive(unMensaje, "message_id");
+                                    cJSON *miId = cJSON_GetObjectItemCaseSensitive(elChat, "id");
+                                    char *postman_data = cJSON_Print(miId);
+                                    if (atoi(postman_data) > 0)
+                                    {
+                                        last_msg_received = atoi(postman_data);
+                                    }
+                                    free(postman_data);
+                                    // cJSON_Delete(elChat);
+                                    // cJSON_Delete(miId);
+                                }
+                                else
+                                    printf("No se encuentra el message ID >:(");
+                            }
+                            if (strcmp(elem->string, "update_id") == 0)
+                            {
+                                cJSON *unMensaje = cJSON_GetObjectItemCaseSensitive(parameter, "update_id");
+                                char *postman_data = cJSON_Print(unMensaje);
+                                ini_OFFSET = atoi(postman_data) + 1;
+                                free(postman_data);
+                            }
+                        }
+                        // cJSON_Delete(elem);
+                    }
+                    // cJSON_Delete(parameters);
+                    // cJSON_Delete(parameter);
+                }
+                else
+                    printf("Algo va mal con el resultado");
+            }
+            else
+                printf("Algo va mal con el ok");
+        */
+    }
+    if (flags == DATA_RECV_FRAME_COMPLETE)
+    {
+        printf("[echo-response] Frame fully received\n");
+    }
+    if (flags == DATA_RECV_RST_STREAM)
+    {
+        printf("[echo-response] Stream Closed\n");
+    }
+    //    vTaskDelete(NULL);
+    return 0;
+}
+
+char *cutoff(const char *str, int from, int to)
+{
+    if (from >= to)
+        return NULL;
+
+    char *cut = calloc(sizeof(char), (to - from) + 1);
+    char *begin = cut;
+    if (!cut)
+        return NULL;
+
+    const char *fromit = str + from;
+    const char *toit = str + to;
+    (void)toit;
+    memcpy(cut, fromit, to);
+    return begin;
+}
+
+int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t len, int flags)
+{
+    if (len)
+    {
+        printf("[get-response] %.*s\n", len, data);
+        // Ahora busco cosas
+        if (data != NULL)
+        {
+            // Sacamos el json de los datos
+            char auxData[len];
+            sprintf(auxData, "%.*s", len, data);
+            cJSON *root = cJSON_Parse(data);
+            char *post_data = cJSON_Print(root);
+
+            if (cJSON_HasObjectItem(root, "ok"))
+            {
+                printf("Tengo un resultado con algo\n");
+                if (cJSON_HasObjectItem(root, "result"))
+                {
+                    printf("Tengo un resultado no vacio\n");
+                    cJSON *parameters = cJSON_GetObjectItemCaseSensitive(root, "result");
+                    puts("Parameters:");
+                    cJSON *parameter;
+                    cJSON_ArrayForEach(parameter, parameters)
+                    {
+
+                        /* Each element is an object with unknown field(s) */
+                        cJSON *elem;
+                        int puedo = 0;
+                        cJSON_ArrayForEach(elem, parameter)
+                        {
+
+                            if (strcmp(elem->string, "update_id") == 0)
+                            {
+                                cJSON *update_id = cJSON_GetObjectItemCaseSensitive(parameter, "update_id");
+                                char *postid_data = cJSON_Print(update_id);
+                                int extraUOffset = atoi(postid_data);
+
+                                printf("El aux del offset: %d\n", extraUOffset);
+                                if (ini_OFFSET == 0 || ini_OFFSET < extraUOffset)
+                                {
+                                    ini_OFFSET = extraUOffset;
+                                    puedo = 1;
+                                }
+                            }
+                            // Esta es nuestra cabeza, la próxima vez que pasamos ni respondemos
+                            if ((puedo == 1) && strcmp(elem->string, "message") == 0)
+                            {
+                                printf("Mira si hay un mensaje encontrado");
+                                cJSON *unMensaje = cJSON_GetObjectItemCaseSensitive(parameter, "message");
+                                if (cJSON_HasObjectItem(unMensaje, "chat"))
+                                {
+
+                                    cJSON *elChat = cJSON_GetObjectItemCaseSensitive(unMensaje, "chat");
+                                    cJSON *miId = cJSON_GetObjectItemCaseSensitive(elChat, "id");
+                                    if (miId != NULL)
+                                    {
+                                        printf("Found key '%s'\n", miId->string);
+                                        char *postman_data = cJSON_Print(miId);
+                                        if (strcmp(postman_data, CHATTOKEN) == 0)
+                                        {
+                                            printf("Estoy en el chat correcto :)");
+                                            cJSON *elMensajeDeLectura = cJSON_GetObjectItemCaseSensitive(unMensaje, "text");
+                                            char *auxMensajeC = cJSON_Print(elMensajeDeLectura); // cJSON_Print
+
+                                            printf("Mensaje que tengo: %s , de %d caracteres", auxMensajeC, strlen(auxMensajeC)); // Deja las 2 " y no se pueden quitar con facilidad"
+                                            char *auxMensaja = cutoff(auxMensajeC, 1, strlen(auxMensajeC));
+                                            printf("Mensaje que tengo: %s , de %d caracteres", auxMensaja, strlen(auxMensaja));
+                                            char *auxMensaje = cutoff(auxMensaja, 0, strlen(auxMensaja) - 1);
+                                            printf("Mensaje que tengo: %s , de %d caracteres", auxMensaje, strlen(auxMensaje));
+                                            // RESPUESTA SI TODO VACÍO O MAL:
+                                            char auxRep[] = "No entiendo";
+
+                                            char cmd1[] = "/saluda";
+                                            // RESPUESTA: Hola Mundo
+                                            char cmd1Rep[] = "Hola Mundo";
+
+                                            char cmd2[] = "/myId";
+                                            // RESPUESTA: La id
+                                            // char cmd2Rep[] = <Mi Id>; que ya hicimos antes (postman_data)
+
+                                            char cmd3[] = "/restartPlaca";
+                                            // RESPUESTA: Hola Mundo
+                                            char cmd3Rep[] = "Enseguida la reseteo";
+
+                                            char cmdP1[] = "Q-Que son los sumideros de carbono";
+                                            char cmdP1Rep[] = "Los sumideros de carbono son depositos naturales que absorben el carbono de la atmósfera y lo fijan.";
+
+                                            char cmdP2[] = "Q-Por que en la fotosintesis una planta toma CO2 y libera unicamente O2";
+                                            // b. ¿Por qué en la fotosíntesis una planta toma CO2 y libera únicamente O2?, ¿qué pasa con el Carbono en ese proceso?
+                                            char cmdP2Rep[] = "Los procesos fotosinteticos de las plantas emplean el CO2 y la luz para producir glucosa, el producto de desecho es el O2, mientras que el carbono se fija.";
+
+                                            char cmdP3[] = "Q-Que componentes son imprescindibles para que una planta crezca";
+                                            // c. ¿Qué componentes son imprescindibles para que una planta crezca?
+                                            char cmdP3Rep[] = "las plantas son aerobeas asi que requieren tambien de oxigeno para sobrevivir, ya que tambien respiran, aunque por el dia no se note. Ademas necesitan de agua y sales minerales para realizar sus procesos metabolicos.";
+
+                                            char str[2048];
+
+                                            if (strcmp(auxMensaje, cmd1) == 0)
+                                            {
+                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmd1Rep);
+                                                /*sh2lib_do_post( aparentemente para casos simples se hace con un get, que curioso*/
+                                                sh2lib_do_get(handle, str, handle_echo_response);
+                                            }
+                                            else if (strcmp(auxMensaje, cmd2) == 0)
+                                            {
+                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, postman_data);
+                                                sh2lib_do_get(handle, str, handle_echo_response);
+                                            }
+                                            else if (strcmp(auxMensaje, cmd3) == 0)
+                                            {
+                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmd3Rep);
+                                                sh2lib_do_get(handle, str, handle_echo_response);
+                                                s_reset_state = 20;
+                                            }
+                                            // TO-DO preguntas
+                                            else if (strcmp(auxMensaje, cmdP1) == 0)
+                                            {
+                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmdP1Rep);
+                                                /*sh2lib_do_post( aparentemente para casos simples se hace con un get, que curioso*/
+                                                sh2lib_do_get(handle, str, handle_echo_response);
+                                            }
+                                            else if (strcmp(auxMensaje, cmdP2) == 0)
+                                            {
+                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmdP2Rep);
+                                                sh2lib_do_get(handle, str, handle_echo_response);
+                                            }
+                                            else if (strcmp(auxMensaje, cmdP3) == 0)
+                                            {
+                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmdP3Rep);
+                                                sh2lib_do_get(handle, str, handle_echo_response);
+                                                s_reset_state = 20;
+                                            }
+                                            else
+                                            {
+                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, auxRep);
+                                                sh2lib_do_get(handle, str, handle_echo_response);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            printf("Este no es mi chat :|");
+                                        }
+                                        free(postman_data);
+                                    }
+
+                                    // cJSON_Delete(elChat);
+                                    // cJSON_Delete(miId);
+                                }
+                                else
+                                    printf("No se encuentra chat :/");
+                            }
+                        }
+                        // cJSON_Delete(elem);
+                    }
+                    // cJSON_Delete(parameters);
+                    // cJSON_Delete(parameter);
+                }
+                else
+                    printf("Algo va mal con el resultado");
+            }
+            else
+                printf("Algo va mal con el ok");
+
+            cJSON_Delete(root);
+            // Free is intentional, it's client responsibility to free the result of cJSON_Print
+            free(post_data);
+        }
+    }
+    if (flags == DATA_RECV_FRAME_COMPLETE)
+    {
+        printf("[get-response] Frame fully received\n");
+    }
+    if (flags == DATA_RECV_RST_STREAM)
+    {
+        printf("[get-response] Stream Closed\n");
+    }
+    // int extraOffsetTemp = ini_OFFSET + extraOffset;
+    // char str[256];
+    // vTaskDelete(NULL);
+    // sprintf(str, "/bot%s/getUpdates?offset=%d&limit=1", TELEGRAMTOKEN, extraOffsetTemp);
+    // sh2lib_do_get(handle, str, handle_echo_response);
+    return 0;
+}
+
+int send_put_data(struct sh2lib_handle *handle, char *buf, size_t length, uint32_t *data_flags)
+{
+#define DATA_TO_SEND "Hello World"
+    int copylen = strlen(DATA_TO_SEND);
+    if (copylen < length)
+    {
+        printf("[data-prvd] Sending %d bytes\n", copylen);
+        memcpy(buf, DATA_TO_SEND, copylen);
+    }
+    else
+    {
+        copylen = 0;
+    }
+
+    (*data_flags) |= NGHTTP2_DATA_FLAG_EOF;
+    return copylen;
+}
+
+static void set_time(void) // Tiempo es necesario para HTTP2
+{
+    struct timeval tv = {
+        .tv_sec = 1509449941,
+    };
+    struct timezone tz = {
+        0, 0};
+    settimeofday(&tv, &tz);
+
+    /* Start SNTP service */
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_init();
+}
+
+static void http2_task(void *args)
+{
+    /* Set current time: proper system time is required for TLS based
+     * certificate verification.
+     */
+    set_time();
+
+    /* HTTP2: one connection multiple requests. Do the TLS/TCP connection first */
+    printf("Connecting to server\n");
+    struct sh2lib_config_t cfg = {
+        .uri = HTTP2_SERVER_URI,
+        .cacert_buf = server_rootTelegram_cert_pem_start,
+        .cacert_bytes = server_rootTelegram_cert_pem_end - server_rootTelegram_cert_pem_start,
+    };
+
+    while (1)
+    {
+        struct sh2lib_handle hd;
+        if (sh2lib_connect(&cfg, &hd) != 0)
+        {
+            printf("Failed to connect\n");
+            vTaskDelete(NULL);
+            return;
+        }
+        printf("Connection done\n");
+
+        int offset = ini_OFFSET; // Offset inicial - TO-DO necesitaremos un archivo entre sesiones, a menos que lo mandemos nosotros
+
+        // Bucle infinito TO-DO ver si el error in send/receive se debe a que se cierran cosas
+        // while (offset == ini_OFFSET); // Espera activa - TO-DO mejorar con semáforos
+        char str[256];
+        offset = ini_OFFSET;
+        printf("My offset es %d", offset);
+        sprintf(str, "/bot%s/getUpdates", TELEGRAMTOKEN); // sprintf(str, "/bot%s/getUpdates?offset=%d&limit=1", TELEGRAMTOKEN, offset);
+        // printf(str);
+        // ACÁ NO, HAZLAS EN EL ECHO offset += 1; // Aumento en 1 el offset
+        /* HTTP GET COMPRUEBO SI ME LLEGAN MENSAJES*/
+        sh2lib_do_get(&hd, str, handle_get_response);
+        /*TO-DO temporizaciones */
+        //----
+        /* HTTP GET  */
+        // correcto ->    sh2lib_do_get(&hd, GETUPDATES, handle_get_response); // HTTP2_STREAMING_GET_PATH TO-DO quita el GETUPDATES DE AHI
+        while (1) // Ahora se pide ejecutar todo lo que se ponga arriba hasta que desconecte
+        {
+            /* Process HTTP2 send/receive */
+            if (sh2lib_execute(&hd) < 0)
+            {
+                printf("Error in send/receive\n");
+                break;
+            }
+            vTaskDelay(1);
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        sh2lib_free(&hd);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    vTaskDelete(NULL);
+}
 
 /* An HTTP GET handler */
 static esp_err_t root_get_handler(httpd_req_t *req)
@@ -536,7 +937,7 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     char offSWITCH[] = "OFF</h1>";
     char voltajeSol[] = "<h1> V sol (mV): ";
     char voltajeAgua[] = "<h1> V hidro (mV): ";
-    char filtroAntes[] = "<h1> Toxinas pre-filtro (ppm): "; // TO-DO
+    char filtroAntes[] = "<h1> Toxinas pre-filtro (ppm): ";    // TO-DO
     char filtroDespues[] = "<h1> Toxinas post-filtro (ppm): "; // TO-DO
     char finEncabezado[] = "</h1>";
     char reseteo[] = "<h>La ESP32 se va a resetear en ";
@@ -560,7 +961,7 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     }
     strcat(mensaje, voltajeSol);
 
-    char voltajeSolecito[sizeof(int)*8+1];
+    char voltajeSolecito[sizeof(int) * 8 + 1];
     itoa(voltajeSolar, voltajeSolecito, 10);
     strcat(mensaje, voltajeSolecito);
     strcat(mensaje, finEncabezado);
@@ -568,25 +969,25 @@ static esp_err_t root_get_handler(httpd_req_t *req)
 
     strcat(mensaje, voltajeAgua);
 
-    char voltajeAqua[sizeof(int)*8+1];
+    char voltajeAqua[sizeof(int) * 8 + 1];
     itoa(voltajeHidro, voltajeAqua, 10);
     strcat(mensaje, voltajeAqua);
     strcat(mensaje, finEncabezado);
     ESP_LOGI(TAG, "Le digo lo del agua");
 
     // TO-DO arreglar extraño bug con el switch, causa que el núcelo entre en pánico si switch está a off y se trata de cambiar el LED
-    //strcat(mensaje, filtroAntes);
+    // strcat(mensaje, filtroAntes);
 
-    //char co2Lectura[sizeof(int)*8+1];
-    //itoa(datoI2CCO2legible , co2Lectura, 10);
-    //strcat(mensaje, co2Lectura);
-    //strcat(mensaje, finEncabezado);
+    // char co2Lectura[sizeof(int)*8+1];
+    // itoa(datoI2CCO2legible , co2Lectura, 10);
+    // strcat(mensaje, co2Lectura);
+    // strcat(mensaje, finEncabezado);
 
-    //strcat(mensaje, filtroDespues);
-    //char lumenLectura[sizeof(int)*8+1];
-    //itoa(datoI2CCO2legible , lumenLectura, 10);
-    //strcat(mensaje, lumenLectura);
-    //strcat(mensaje, finEncabezado);
+    // strcat(mensaje, filtroDespues);
+    // char lumenLectura[sizeof(int)*8+1];
+    // itoa(datoI2CCO2legible , lumenLectura, 10);
+    // strcat(mensaje, lumenLectura);
+    // strcat(mensaje, finEncabezado);
 
     mess = strcat(mensaje, finDePagina);
     if (s_reset_state != 0)
@@ -613,8 +1014,6 @@ static esp_err_t buttON_get_handler(httpd_req_t *req)
     httpd_resp_set_status(req, "302");
     httpd_resp_set_type(req, "text/html");
     httpd_resp_send(req, "Redirigiendo", HTTPD_RESP_USE_STRLEN);
-    // httpd_resp_set_type(req, "text/html");
-    // root_get_handler(req);
 
     return ESP_OK;
 }
@@ -708,6 +1107,14 @@ static const httpd_uri_t on = {
     .method = HTTP_GET,
     .handler = buttON_get_handler};
 
+/*
+#define BOT_TOKEN tokenBotUCAEP
+const unsigned long BOT_MTBS = 1000; // mean time between scan messages
+WiFiClientSecure secured_client;
+UniversalTelegramBot bot(BOT_TOKEN, secured_client);
+unsigned long bot_lasttime; // last time messages' scan has been done
+
+*/
 static httpd_handle_t start_webserver(void)
 {
     httpd_handle_t server = NULL;
@@ -772,7 +1179,37 @@ static void connect_handler(void *arg, esp_event_base_t event_base,
         *server = start_webserver();
     }
 }
-
+/*
+ * TELEGRAM
+ */
+esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+{
+    switch (evt->event_id)
+    {
+    case HTTP_EVENT_ERROR:
+        ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
+        break;
+    case HTTP_EVENT_ON_CONNECTED:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
+        break;
+    case HTTP_EVENT_HEADER_SENT:
+        ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
+        break;
+    case HTTP_EVENT_ON_HEADER:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        break;
+    case HTTP_EVENT_ON_DATA:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+        break;
+    case HTTP_EVENT_ON_FINISH:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
+        break;
+    case HTTP_EVENT_DISCONNECTED:
+        ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
+        break;
+    }
+    return ESP_OK;
+}
 // Volver a la partición de fábrica
 void backtofactory()
 {
@@ -819,8 +1256,8 @@ static void configure_analog(void)
 void app_main(void)
 {
     /*
-    * Configurar periféricos, LED, switch y los inputs analógicos
-    */
+     * Configurar periféricos, LED, switch y los inputs analógicos
+     */
     configure_led();
     configure_switch();
     configure_analog();
@@ -847,8 +1284,8 @@ void app_main(void)
     ESP_ERROR_CHECK(adc2_config_channel_atten(ADC2_EXAMPLE_CHAN0, ADC_EXAMPLE_ATTEN));
 
     /*
-    * Informacion del chip
-    */
+     * Informacion del chip
+     */
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
     printf("This is %s chip with %d CPU core(s), WiFi%s%s, ",
@@ -870,7 +1307,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    /* 
+    /*
      * Registrar handlers de evento para montar el servidor cuando se conectan el Wi-Di o Ethernet, y parar cuando se desconecta.
      */
 
@@ -890,10 +1327,13 @@ void app_main(void)
     ESP_ERROR_CHECK(example_connect());
 
     /*
-    * Establecer la conexión MQTT, crearé al cliente
-    */
+     * Establecer la conexión MQTT, crearé al cliente
+     */
     client = esp_mqtt_client_init(&mqtt_cfg);
     esp_mqtt_client_start(client);
+
+    // Task HTTP2 para Telegram
+    xTaskCreate(&http2_task, "http2_task", (1024 * 32), NULL, 5, NULL);
 
     // Task mqtt? TO-DO?
     //  xTaskCreate(mqtt_app_start, "mqtt_send_data_0", 1024 * 2, (void *)0, 10, NULL);
@@ -902,8 +1342,8 @@ void app_main(void)
     // xTaskCreate(adc_app_loop, "adc_receive_data_0", 1024 * 2, (void *)0, 10, NULL);
 
     /*
-    * Bucle infinito TO-DO mejorar con Tasks?
-    */ 
+     * Bucle infinito TO-DO mejorar con Tasks?
+     */
     while (1)
     {
         if (gpio_get_level(PIN_SWITCH))
@@ -950,7 +1390,6 @@ void app_main(void)
             ESP_LOGI(TAG_CH[0][0], "cali data: %d mV", voltage);
         }
 
-        
         vTaskDelay(pdMS_TO_TICKS(2000)); // Delays para asegurar lecturas ADC correctas
 
 #if CONFIG_IDF_TARGET_ESP32 // El WiFi usa en adc2 así que no podemos usar ese segundo módulo, mejor multiplexamos el adc1
@@ -981,7 +1420,7 @@ void app_main(void)
         // ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9));
         ESP_LOGI(TAG, "Procedo a leer I2C de Luminosidad");
         ESP_ERROR_CHECK(register_read_commando(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
-        
+
         vTaskDelay(pdMS_TO_TICKS(1000)); // El I2C puede tardar hasta 11 segundos
         /* Demonstrate writing by reseting the MPU9250 */
         //    ESP_ERROR_CHECK(mpu9250_register_write_byte(MPU9250_PWR_MGMT_1_REG_ADDR, 1 << MPU9250_RESET_BIT));
@@ -990,8 +1429,8 @@ void app_main(void)
         //    ESP_LOGI(TAG, "I2C unitialized successfully");
 
         /*
-        *MQTT: los datos obtenidos los mandamos a Thingsboard
-        */
+         *MQTT: los datos obtenidos los mandamos a Thingsboard
+         */
         mqtt_app_start();
     }
 }

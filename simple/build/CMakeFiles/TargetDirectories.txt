@@ -691,3 +691,10 @@ C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/pro
 C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/protocol_examples_common/CMakeFiles/install.dir
 C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/protocol_examples_common/CMakeFiles/install/local.dir
 C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/protocol_examples_common/CMakeFiles/install/strip.dir
+C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/sh2lib/CMakeFiles/__idf_sh2lib.dir
+C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/sh2lib/CMakeFiles/edit_cache.dir
+C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/sh2lib/CMakeFiles/rebuild_cache.dir
+C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/sh2lib/CMakeFiles/list_install_components.dir
+C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/sh2lib/CMakeFiles/install.dir
+C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/sh2lib/CMakeFiles/install/local.dir
+C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/sh2lib/CMakeFiles/install/strip.dir

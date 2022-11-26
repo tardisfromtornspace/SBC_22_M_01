@@ -124,6 +124,7 @@ if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   include("C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/main/cmake_install.cmake")
   include("C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/led_strip/cmake_install.cmake")
   include("C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/protocol_examples_common/cmake_install.cmake")
+  include("C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/sh2lib/cmake_install.cmake")
 
 endif()
 

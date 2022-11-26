@@ -10,6 +10,11 @@
     "array": "c",
     "string": "c",
     "string_view": "c",
-    "*.inc": "c"
+    "*.inc": "c",
+    "cjson.h": "c",
+    "sstream": "c",
+    "regex": "c",
+    "string.h": "c",
+    "*.ipp": "c"
   }
 }
