@@ -156,11 +156,13 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
 #define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
-#define CHATTOKEN "CABMBIA POR EL TUYO"
+#define CHATTOKEN "CAMBIA POR EL TUYO"
 #define INIOFF "559291164"
 int ini_OFFSET = 0;                // El offset inicial TO-DO alterar con memoria guardada
 int last_msg_received = 559291163; // El último recibido TO-DO alterar con memoria guardada
 int extraOffset = 0;
+int conexionEnProceso = 1;
+int conproc = -1;
 
 // DESCOMENTA static const char GETBOT[] = "/bot" TELEGRAMTOKEN "/";
 // static const char GETUPDATES[] = "/bot" TELEGRAMTOKEN "/getUpdates?limit=5";
@@ -627,6 +629,7 @@ int handle_echo_response(struct sh2lib_handle *handle, const char *data, size_t 
     if (flags == DATA_RECV_RST_STREAM)
     {
         printf("[echo-response] Stream Closed\n");
+        conexionEnProceso = 0;
     }
     //    vTaskDelete(NULL);
     return 0;
@@ -692,6 +695,9 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
                                 {
                                     ini_OFFSET = extraUOffset;
                                     puedo = 1;
+                                } else if (conproc < extraUOffset) {
+                                    conproc = extraUOffset;
+                                    printf("valor de conproc ahora = %d", conproc);
                                 }
                             }
                             // Esta es nuestra cabeza, la próxima vez que pasamos ni respondemos
@@ -825,6 +831,11 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
     if (flags == DATA_RECV_RST_STREAM)
     {
         printf("[get-response] Stream Closed\n");
+        if (ini_OFFSET > conproc)
+        {
+            conexionEnProceso = 1;
+        } else conexionEnProceso = 0;
+        printf("primer get %d con ini offset = %d: Conexion en proceso = %d", conproc, ini_OFFSET, conexionEnProceso);
     }
     // int extraOffsetTemp = ini_OFFSET + extraOffset;
     // char str[256];
@@ -883,6 +894,7 @@ static void http2_task(void *args)
 
     while (1)
     {
+        conexionEnProceso = 1;
         struct sh2lib_handle hd;
         if (sh2lib_connect(&cfg, &hd) != 0)
         {
@@ -902,7 +914,7 @@ static void http2_task(void *args)
         sprintf(str, "/bot%s/getUpdates", TELEGRAMTOKEN);
         sh2lib_do_get(&hd, str, handle_get_response);
         /* HTTP GET  */
-        while (1) // Ahora se pide ejecutar todo lo que se ponga arriba hasta que desconecte
+        while (conexionEnProceso > 0) // Ahora se pide ejecutar todo lo que se ponga arriba hasta que desconecte
         {
             /* Process HTTP2 send/receive */
             if (sh2lib_execute(&hd) < 0)
