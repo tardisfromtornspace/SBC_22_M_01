@@ -156,8 +156,7 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
 #define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
-#define CHATTOKEN "CAMBIA POR EL TUYO"
-#define INIOFF "559291164"
+#define CHATTOKEN "CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 int ini_OFFSET = 0;                // El offset inicial TO-DO alterar con memoria guardada
 int last_msg_received = 559291163; // El último recibido TO-DO alterar con memoria guardada
 int extraOffset = 0;
@@ -166,8 +165,7 @@ int conproc = -1;
 
 // DESCOMENTA static const char GETBOT[] = "/bot" TELEGRAMTOKEN "/";
 // static const char GETUPDATES[] = "/bot" TELEGRAMTOKEN "/getUpdates?limit=5";
-// static const char GETUPDATES[] = "/bot" TELEGRAMTOKEN "/getUpdates?offset=" INIOFF "&limit=1";
-static const char POSTUPDATES[] = "/bot" TELEGRAMTOKEN "/sendMessage?chat_id=" CHATTOKEN; // TO-DO hacer más dinamico para que no solo responda a uno todo el rato?
+static const char POSTUPDATES[] = "/bot" TELEGRAMTOKEN "/sendMessage?chat_id=" CHATTOKEN;
 
 // LEDes y algunos datos
 
@@ -435,8 +433,6 @@ static esp_err_t register_read_commando(uint8_t slave_addr, uint8_t reg_addr, si
     // free(dato);
     ESP_LOGI(TAG, "El Lumen me sale %X", datoI2CFotonlegible);
     return ESP_OK;
-
-    // return i2c_master_write_read_device(I2C_MASTER_NUM, slave_addr, &reg_addr, 1, data, len, I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
 }
 
 /**
@@ -562,65 +558,6 @@ int handle_echo_response(struct sh2lib_handle *handle, const char *data, size_t 
     if (len)
     {
         printf("[echo-response] %.*s\n", len, data);
-        /*    // Sacamos el json de los datos
-            char auxData[len];
-            sprintf(auxData, "%.*s", len, data);
-
-            cJSON *root = cJSON_Parse(data);
-            if (cJSON_HasObjectItem(root, "ok"))
-            {
-                printf("Tengo un resultado\n");
-                if (cJSON_HasObjectItem(root, "result"))
-                {
-                    printf("Tengo un ACK\n");
-                    cJSON *parameters = cJSON_GetObjectItemCaseSensitive(root, "result");
-                    cJSON *parameter;
-                    cJSON_ArrayForEach(parameter, parameters)
-                    {
-                        // Each element is an object with unknown field(s)
-                        cJSON *elem;
-                        cJSON_ArrayForEach(elem, parameter)
-                        {
-                            if (strcmp(elem->string, "message") == 0)
-                            {
-                                printf("Mira si hay un ACK con message encontrado");
-                                cJSON *unMensaje = cJSON_GetObjectItemCaseSensitive(parameter, "message");
-                                if (cJSON_HasObjectItem(unMensaje, "message_id"))
-                                {
-
-                                    cJSON *elChat = cJSON_GetObjectItemCaseSensitive(unMensaje, "message_id");
-                                    cJSON *miId = cJSON_GetObjectItemCaseSensitive(elChat, "id");
-                                    char *postman_data = cJSON_Print(miId);
-                                    if (atoi(postman_data) > 0)
-                                    {
-                                        last_msg_received = atoi(postman_data);
-                                    }
-                                    free(postman_data);
-                                    // cJSON_Delete(elChat);
-                                    // cJSON_Delete(miId);
-                                }
-                                else
-                                    printf("No se encuentra el message ID >:(");
-                            }
-                            if (strcmp(elem->string, "update_id") == 0)
-                            {
-                                cJSON *unMensaje = cJSON_GetObjectItemCaseSensitive(parameter, "update_id");
-                                char *postman_data = cJSON_Print(unMensaje);
-                                ini_OFFSET = atoi(postman_data) + 1;
-                                free(postman_data);
-                            }
-                        }
-                        // cJSON_Delete(elem);
-                    }
-                    // cJSON_Delete(parameters);
-                    // cJSON_Delete(parameter);
-                }
-                else
-                    printf("Algo va mal con el resultado");
-            }
-            else
-                printf("Algo va mal con el ok");
-        */
     }
     if (flags == DATA_RECV_FRAME_COMPLETE)
     {
@@ -740,6 +677,10 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
                                             // RESPUESTA: Hola Mundo
                                             char cmd3Rep[] = "Enseguida la reseteo";
 
+                                            char cmd4[] = "/datos";
+                                            // RESPUESTA: Devuelve la info del sistema que recoge
+                                            char cmd4Rep[] = "El sistema detecta: ";
+
                                             char cmdP1[] = "Q-Que son los sumideros de carbono";
                                             char cmdP1Rep[] = "Los sumideros de carbono son depositos naturales que absorben el carbono de la atmósfera y lo fijan.";
 
@@ -770,7 +711,13 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
                                                 sh2lib_do_get(handle, str, handle_echo_response);
                                                 s_reset_state = 20;
                                             }
-                                            // TO-DO preguntas
+                                            else if (strcmp(auxMensaje, cmd4) == 0)
+                                            {
+                                                sprintf(str, "%s&text=%s :%s Vsolar = %d, Vhidro = %d, Tox pre-filtro = %d, Tox post-filtro = %d. SwitchDisplay = %d", POSTUPDATES, auxMensaje, cmd4Rep, voltajeSolar, voltajeHidro, datoI2CCO2legible, datoI2CCO2legible, s_switch_state);
+                                                sh2lib_do_get(handle, str, handle_echo_response);
+                                                s_reset_state = 20;
+                                            }
+                                            // Las preguntas
                                             else if (strcmp(auxMensaje, cmdP1) == 0)
                                             {
                                                 sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmdP1Rep);
@@ -904,14 +851,12 @@ static void http2_task(void *args)
         }
         printf("Connection done\n");
 
-        int offset = ini_OFFSET; // Offset inicial - TO-DO necesitaremos un archivo entre sesiones, a menos que lo mandemos nosotros
+        int offset = ini_OFFSET; // Offset inicial
 
-        // Bucle infinito TO-DO ver si el error in send/receive se debe a que se cierran cosas
-        // while (offset == ini_OFFSET); // Espera activa - TO-DO mejorar con semáforos
         char str[256];
         offset = ini_OFFSET;
         printf("My offset es %d", offset);
-        sprintf(str, "/bot%s/getUpdates", TELEGRAMTOKEN);
+        sprintf(str, "/bot%s/getUpdates?offset=%d", TELEGRAMTOKEN, offset);
         sh2lib_do_get(&hd, str, handle_get_response);
         /* HTTP GET  */
         while (conexionEnProceso > 0) // Ahora se pide ejecutar todo lo que se ponga arriba hasta que desconecte
