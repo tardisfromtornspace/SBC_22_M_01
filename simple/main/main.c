@@ -156,7 +156,10 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
 #define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
-#define CHATTOKEN "CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define CHATTOKEN "-891728903"               //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define UNIVERSITY "SBC22_M01"                                         //"UPM"
+#define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
+#define MQTTURI "mqtt://demo.thingsboard.io"
 int ini_OFFSET = 0;                // El offset inicial TO-DO alterar con memoria guardada
 int last_msg_received = 559291163; // El último recibido TO-DO alterar con memoria guardada
 int extraOffset = 0;
@@ -455,10 +458,10 @@ static esp_err_t display_register_write_byte(uint8_t reg_addr, uint8_t data)
 
 // MQTT
 esp_mqtt_client_config_t mqtt_cfg = {
-    .uri = "mqtt://demo.thingsboard.io", // Luego estoapi/v1/Y0kg9ua7tm6s4vaB0X1H/telemetry" ?
+    .uri = MQTTURI, //"mqtt://demo.thingsboard.io", // api/v1/Y0kg9ua7tm6s4vaB0X1H/telemetry" ?
     //.event_handle = mqtt_event_handler,
     .port = 1883,
-    .username = "YSRNEFDXnyIGhX9OaylG", // token MQTT TO-DO ¿Quitar?
+    .username = TOKENMQTT, //"YSRNEFDXnyIGhX9OaylG", // token MQTT
 };
 
 esp_mqtt_client_handle_t client;
@@ -632,7 +635,9 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
                                 {
                                     ini_OFFSET = extraUOffset;
                                     puedo = 1;
-                                } else if (conproc < extraUOffset) {
+                                }
+                                else if (conproc < extraUOffset)
+                                {
                                     conproc = extraUOffset;
                                     printf("valor de conproc ahora = %d", conproc);
                                 }
@@ -654,92 +659,96 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
                                         if (strcmp(postman_data, CHATTOKEN) == 0)
                                         {
                                             printf("Estoy en el chat correcto :)");
-                                            cJSON *elMensajeDeLectura = cJSON_GetObjectItemCaseSensitive(unMensaje, "text");
-                                            char *auxMensajeC = cJSON_Print(elMensajeDeLectura); // cJSON_Print
-
-                                            printf("Mensaje que tengo: %s , de %d caracteres", auxMensajeC, strlen(auxMensajeC)); // Deja las 2 " y no se pueden quitar con facilidad"
-                                            char *auxMensaja = cutoff(auxMensajeC, 1, strlen(auxMensajeC));
-                                            printf("Mensaje que tengo: %s , de %d caracteres", auxMensaja, strlen(auxMensaja));
-                                            char *auxMensaje = cutoff(auxMensaja, 0, strlen(auxMensaja) - 1);
-                                            printf("Mensaje que tengo: %s , de %d caracteres", auxMensaje, strlen(auxMensaje));
-                                            // RESPUESTA SI TODO VACÍO O MAL:
-                                            char auxRep[] = "No entiendo";
-
-                                            char cmd1[] = "/saluda";
-                                            // RESPUESTA: Hola Mundo
-                                            char cmd1Rep[] = "Hola Mundo";
-
-                                            char cmd2[] = "/myId";
-                                            // RESPUESTA: La id
-                                            // char cmd2Rep[] = <Mi Id>; que ya hicimos antes (postman_data)
-
-                                            char cmd3[] = "/restartPlaca";
-                                            // RESPUESTA: Hola Mundo
-                                            char cmd3Rep[] = "Enseguida la reseteo";
-
-                                            char cmd4[] = "/datos";
-                                            // RESPUESTA: Devuelve la info del sistema que recoge
-                                            char cmd4Rep[] = "El sistema detecta: ";
-
-                                            char cmdP1[] = "Q-Que son los sumideros de carbono";
-                                            char cmdP1Rep[] = "Los sumideros de carbono son depositos naturales que absorben el carbono de la atmósfera y lo fijan.";
-
-                                            char cmdP2[] = "Q-Por que en la fotosintesis una planta toma CO2 y libera unicamente O2";
-                                            // b. ¿Por qué en la fotosíntesis una planta toma CO2 y libera únicamente O2?, ¿qué pasa con el Carbono en ese proceso?
-                                            char cmdP2Rep[] = "Los procesos fotosinteticos de las plantas emplean el CO2 y la luz para producir glucosa, el producto de desecho es el O2, mientras que el carbono se fija.";
-
-                                            char cmdP3[] = "Q-Que componentes son imprescindibles para que una planta crezca";
-                                            // c. ¿Qué componentes son imprescindibles para que una planta crezca?
-                                            char cmdP3Rep[] = "las plantas son aerobeas asi que requieren tambien de oxigeno para sobrevivir, ya que tambien respiran, aunque por el dia no se note. Ademas necesitan de agua y sales minerales para realizar sus procesos metabolicos.";
-
-                                            char str[2048];
-
-                                            if (strcmp(auxMensaje, cmd1) == 0)
+                                            if (cJSON_HasObjectItem(unMensaje, "text"))
                                             {
-                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmd1Rep);
-                                                /*sh2lib_do_post( aparentemente para casos simples se hace con un get, que curioso*/
-                                                sh2lib_do_get(handle, str, handle_echo_response);
-                                            }
-                                            else if (strcmp(auxMensaje, cmd2) == 0)
-                                            {
-                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, postman_data);
-                                                sh2lib_do_get(handle, str, handle_echo_response);
-                                            }
-                                            else if (strcmp(auxMensaje, cmd3) == 0)
-                                            {
-                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmd3Rep);
-                                                sh2lib_do_get(handle, str, handle_echo_response);
-                                                s_reset_state = 20;
-                                            }
-                                            else if (strcmp(auxMensaje, cmd4) == 0)
-                                            {
-                                                sprintf(str, "%s&text=%s :%s Vsolar = %d, Vhidro = %d, Tox pre-filtro = %d, Tox post-filtro = %d. SwitchDisplay = %d", POSTUPDATES, auxMensaje, cmd4Rep, voltajeSolar, voltajeHidro, datoI2CCO2legible, datoI2CCO2legible, s_switch_state);
-                                                sh2lib_do_get(handle, str, handle_echo_response);
-                                                s_reset_state = 20;
-                                            }
-                                            // Las preguntas
-                                            else if (strcmp(auxMensaje, cmdP1) == 0)
-                                            {
-                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmdP1Rep);
-                                                /*sh2lib_do_post( aparentemente para casos simples se hace con un get, que curioso*/
-                                                sh2lib_do_get(handle, str, handle_echo_response);
-                                            }
-                                            else if (strcmp(auxMensaje, cmdP2) == 0)
-                                            {
-                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmdP2Rep);
-                                                sh2lib_do_get(handle, str, handle_echo_response);
-                                            }
-                                            else if (strcmp(auxMensaje, cmdP3) == 0)
-                                            {
-                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, cmdP3Rep);
-                                                sh2lib_do_get(handle, str, handle_echo_response);
-                                                s_reset_state = 20;
+                                                cJSON *elMensajeDeLectura = cJSON_GetObjectItemCaseSensitive(unMensaje, "text");
+                                                char *auxMensajeC = cJSON_Print(elMensajeDeLectura); // cJSON_Print
+
+                                                printf("Mensaje que tengo: %s , de %d caracteres", auxMensajeC, strlen(auxMensajeC)); // Deja las 2 " y no se pueden quitar con facilidad"
+                                                char *auxMensaja = cutoff(auxMensajeC, 1, strlen(auxMensajeC));
+                                                printf("Mensaje que tengo: %s , de %d caracteres", auxMensaja, strlen(auxMensaja));
+                                                char *auxMensaje = cutoff(auxMensaja, 0, strlen(auxMensaja) - 1);
+                                                printf("Mensaje que tengo: %s , de %d caracteres", auxMensaje, strlen(auxMensaje));
+                                                // RESPUESTA SI TODO VACÍO O MAL:
+                                                char auxRep[] = "No entiendo";
+
+                                                char cmd1[] = "/saluda";
+                                                // RESPUESTA: Hola Mundo
+                                                char cmd1Rep[] = "Hola Mundo";
+
+                                                char cmd2[] = "/myId";
+                                                // RESPUESTA: La id
+                                                // char cmd2Rep[] = <Mi Id>; que ya hicimos antes (postman_data)
+
+                                                char cmd3[] = "/restartPlaca";
+                                                // RESPUESTA: Hola Mundo
+                                                char cmd3Rep[] = "Enseguida la reseteo";
+
+                                                char cmd4[] = "/datos";
+                                                // RESPUESTA: Devuelve la info del sistema que recoge
+                                                char cmd4Rep[] = "El sistema detecta: ";
+
+                                                char cmdP1[] = "/Q-Que son los sumideros de carbono";
+                                                char cmdP1Rep[] = "Los sumideros de carbono son depositos naturales que absorben el carbono de la atmósfera y lo fijan.";
+
+                                                char cmdP2[] = "/Q-Por que en la fotosintesis una planta toma CO2 y libera unicamente O2";
+                                                // b. ¿Por qué en la fotosíntesis una planta toma CO2 y libera únicamente O2?, ¿qué pasa con el Carbono en ese proceso?
+                                                char cmdP2Rep[] = "Los procesos fotosinteticos de las plantas emplean el CO2 y la luz para producir glucosa, el producto de desecho es el O2, mientras que el carbono se fija.";
+
+                                                char cmdP3[] = "/Q-Que componentes son imprescindibles para que una planta crezca";
+                                                // c. ¿Qué componentes son imprescindibles para que una planta crezca?
+                                                char cmdP3Rep[] = "las plantas son aerobeas asi que requieren tambien de oxigeno para sobrevivir, ya que tambien respiran, aunque por el dia no se note. Ademas necesitan de agua y sales minerales para realizar sus procesos metabolicos.";
+
+                                                char str[2048];
+
+                                                if (strcmp(auxMensaje, cmd1) == 0)
+                                                {
+                                                    sprintf(str, "%s&text=%s : %s: %s", POSTUPDATES, auxMensaje, UNIVERSITY, cmd1Rep);
+                                                    // sh2lib_do_post( aparentemente para casos simples se hace con un get, que curioso
+                                                    sh2lib_do_get(handle, str, handle_echo_response);
+                                                }
+                                                else if (strcmp(auxMensaje, cmd2) == 0)
+                                                {
+                                                    sprintf(str, "%s&text=%s : %s: %s", POSTUPDATES, auxMensaje, UNIVERSITY, postman_data);
+                                                    sh2lib_do_get(handle, str, handle_echo_response);
+                                                }
+                                                else if (strcmp(auxMensaje, cmd3) == 0)
+                                                {
+                                                    sprintf(str, "%s&text=%s : %s: %s", POSTUPDATES, auxMensaje, UNIVERSITY, cmd3Rep);
+                                                    sh2lib_do_get(handle, str, handle_echo_response);
+                                                    s_reset_state = 20;
+                                                }
+                                                else if (strcmp(auxMensaje, cmd4) == 0)
+                                                {
+                                                    sprintf(str, "%s&text=%s : %s: %s Vsolar = %d, Vhidro = %d, Tox pre-filtro = %d, Tox post-filtro = %d. SwitchDisplay = %d", POSTUPDATES, auxMensaje, UNIVERSITY, cmd4Rep, voltajeSolar, voltajeHidro, datoI2CCO2legible, datoI2CCO2legible, s_switch_state);
+                                                    sh2lib_do_get(handle, str, handle_echo_response);
+                                                    s_reset_state = 20;
+                                                }
+                                                // Las preguntas
+                                                else if (strcmp(auxMensaje, cmdP1) == 0)
+                                                {
+                                                    sprintf(str, "%s&text=%s : %s: %s", POSTUPDATES, auxMensaje, UNIVERSITY, cmdP1Rep);
+                                                    sh2lib_do_get(handle, str, handle_echo_response);
+                                                }
+                                                else if (strcmp(auxMensaje, cmdP2) == 0)
+                                                {
+                                                    sprintf(str, "%s&text=%s : %s: %s", POSTUPDATES, auxMensaje, UNIVERSITY, cmdP2Rep);
+                                                    sh2lib_do_get(handle, str, handle_echo_response);
+                                                }
+                                                else if (strcmp(auxMensaje, cmdP3) == 0)
+                                                {
+                                                    sprintf(str, "%s&text=%s : %s: %s", POSTUPDATES, auxMensaje, UNIVERSITY, cmdP3Rep);
+                                                    sh2lib_do_get(handle, str, handle_echo_response);
+                                                    s_reset_state = 20;
+                                                }
+                                                else
+                                                {
+                                                    sprintf(str, "%s&text=%s : %s: %s", POSTUPDATES, auxMensaje, UNIVERSITY, auxRep);
+                                                    sh2lib_do_get(handle, str, handle_echo_response);
+                                                }
                                             }
                                             else
-                                            {
-                                                sprintf(str, "%s&text=%s :%s", POSTUPDATES, auxMensaje, auxRep);
-                                                sh2lib_do_get(handle, str, handle_echo_response);
-                                            }
+                                                printf("Mensaje de otro tipo");
                                         }
                                         else
                                         {
@@ -781,7 +790,9 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
         if (ini_OFFSET > conproc)
         {
             conexionEnProceso = 1;
-        } else conexionEnProceso = 0;
+        }
+        else
+            conexionEnProceso = 0;
         printf("primer get %d con ini offset = %d: Conexion en proceso = %d", conproc, ini_OFFSET, conexionEnProceso);
     }
     // int extraOffsetTemp = ini_OFFSET + extraOffset;
