@@ -107,13 +107,17 @@ EN LOS PINES NO PONGAIS DE 6 A 11 QUE ESOS SON DE LA FLASH
 #define CO2_SENSOR_ADDR 0x5A /*!< Slave address of the CO2 sensor is 0x5A, when we add an additional binary 1 behind it transforms into 0xB5 */
 #define CO2_REG_ADDR 0x5A    /*!< Register addresses of the CO2 lecture register */
 
+#define TEMPHUM_SENSOR_ADDR 0x44 /*Dir sensor tempHum*/
+#define COMANDO_TEMPHUM_MSB 0x24
+#define COMANDO_TEMPHUM_LSB 0x16 /*Los comandos de este sensor son de 16 bits, indican el MSB el modo y el LSB la frecuencia, así 0x24 0x16 es modo SIngle Shot con baja repetibilidad*/
+
 #define LUZ_SENSOR_ADDR 0x10 /*Dir sensor luminosidad*/
 #define LUZ_REG_ADDR 0x04    /*Dir registro de luminosidad es 0x04*/
 
 #define MPU9250_PWR_MGMT_1_REG_ADDR 0x6B /*!< Register addresses of the power managment register */
 #define MPU9250_RESET_BIT 7
 
-#define READ_BIT I2C_MASTER_READ      /*Bits de lectura y escritura*/
+#define READ_BIT I2C_MASTER_READ /*Bits de lectura y escritura*/
 #define WRITE_BIT I2C_MASTER_WRITE
 #define ACK_CHECK_EN 0x1              /*!< I2C master will check ack from slave*/
 #define ACK_CHECK_DIS 0x0             /*!< I2C master will not check ack from slave */
@@ -155,8 +159,8 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 /* The HTTP/2 server to connect to */
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
-#define TELEGRAMTOKEN "5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY" //"CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
-#define CHATTOKEN "5983287334"//"-891728903"                                         //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define CHATTOKEN "-891728903"                                         //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 #define UNIVERSITY "SBC22_M01"                                         //"UPM"
 #define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
 #define MQTTURI "mqtt://demo.thingsboard.io"
@@ -282,10 +286,10 @@ static esp_err_t i2c_master_init(void)
 /**
  * @brief Read a sequence of bytes from a sensor register
  */
-static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len) // , uint8_t *data
+static esp_err_t CO2_register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len) // Los dispositivos que requieren de clock stretching no son soportados por ESP32 bien TO-DO cambiar al tercr sensor
 {
 
-    uint8_t dato[9] = { 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    uint8_t dato[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
 
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     // Primero hacemos que el sensor nos lea el comando
@@ -300,7 +304,7 @@ static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len)
     ESP_ERROR_CHECK(i2c_master_read_byte(cmd, &dato[len - 1], NACK_VAL));
     ESP_ERROR_CHECK(i2c_master_stop(cmd));
 
-    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(1500));
+    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK)
     {
@@ -341,6 +345,107 @@ static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len)
     // i2c_driver_delete(i2c_master_port);
 
     esp_log_buffer_hex(TAG, dato, 9);
+    datoI2CCO2legible = dato[0] * 256 + dato[1];
+    ESP_LOGI(TAG, "El CO2 me sale %X", datoI2CCO2legible);
+    return ESP_OK;
+}
+
+static esp_err_t tempHum_register_read(uint8_t slave_addr, uint8_t reg_addrMSB, uint8_t reg_addrLSB, size_t len) // Los dispositivos que requieren de clock stretching no son soportados por ESP32 bien TO-DO cambiar al tercr sensor
+{
+
+    uint8_t dato[6] = {1, 2, 3, 4, 5, 6};
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    // Primero hacemos que el sensor nos lea el comando
+    ESP_ERROR_CHECK(i2c_master_start(cmd));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) | WRITE_BIT, ACK_VAL));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, reg_addrMSB, ACK_CHECK_EN));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, reg_addrLSB, ACK_CHECK_EN));
+    ESP_ERROR_CHECK(i2c_master_stop(cmd));
+
+    esp_err_t retA = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+    vTaskDelay(pdMS_TO_TICKS(20)); // Needs 1 ms to prepare
+
+    i2c_cmd_link_delete(cmd);
+    if (retA == ESP_OK)
+    {
+        ESP_LOGI(TAG, "Logre llamar al sensor i2c tempHum y darle un comando");
+    }
+    else if (retA == ESP_ERR_TIMEOUT)
+    {
+        ESP_LOGW(TAG, "Bus is busy");
+    }
+    else if (retA == ESP_ERR_INVALID_ARG)
+    {
+        ESP_LOGW(TAG, "Parameter error");
+    }
+    else if (retA == ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGW(TAG, "I2C driver not installed on not in master mode");
+    }
+    else if (retA == ESP_FAIL)
+    {
+        ESP_LOGW(TAG, "Command error, slave hasn't ACK the transfer");
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Read failed");
+    }
+    ESP_LOGI(TAG, "My ESP-CODE is %d", retA);
+
+    i2c_cmd_handle_t cmd3 = i2c_cmd_link_create();
+    ESP_ERROR_CHECK(i2c_master_start(cmd3));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd3, (slave_addr << 1) | READ_BIT, ACK_VAL));
+    int i = 0;
+    for (i = 0; i < len - 1; i++)
+    {
+        ESP_ERROR_CHECK(i2c_master_read_byte(cmd3, &dato[i], ACK_VAL));
+    }
+    ESP_ERROR_CHECK(i2c_master_read_byte(cmd3, &dato[len - 1], NACK_VAL));
+    ESP_ERROR_CHECK(i2c_master_stop(cmd3));
+
+    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd3, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+
+    i2c_cmd_link_delete(cmd3);
+    if (ret == ESP_OK)
+    {
+        ESP_LOGW(TAG, "Recibi dato tempHum");
+        for (int i = 0; i < len; i++)
+        {
+            printf("0x%02x ", dato[i]);
+            if ((i + 1) % 16 == 0)
+            {
+                printf("\r\n");
+            }
+        }
+        if (len % 16)
+        {
+            printf("\r\n");
+        }
+    }
+    else if (ret == ESP_ERR_TIMEOUT)
+    {
+        ESP_LOGW(TAG, "Bus is busy");
+    }
+    else if (ret == ESP_ERR_INVALID_ARG)
+    {
+        ESP_LOGW(TAG, "Parameter error");
+    }
+    else if (ret == ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGW(TAG, "I2C driver not installed on not in master mode");
+    }
+    else if (ret == ESP_FAIL)
+    {
+        ESP_LOGW(TAG, "Command error, slave hasn't ACK the transfer");
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Read failed");
+    }
+    ESP_LOGI(TAG, "My ESP-CODE is %d", ret);
+
+    esp_log_buffer_hex(TAG, dato, len);
     datoI2CCO2legible = dato[0] * 256 + dato[1];
     ESP_LOGI(TAG, "El CO2 me sale %X", datoI2CCO2legible);
     return ESP_OK;
@@ -442,7 +547,7 @@ static esp_err_t iniciar_sensorLuz(uint8_t slave_addr, uint8_t reg_addr, size_t 
     i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK)
     {
-       ESP_LOGI(TAG, "Inicialización Sensor Lumen A exitoso");
+        ESP_LOGI(TAG, "Inicialización Sensor Lumen A exitoso");
     }
     else if (ret == ESP_ERR_TIMEOUT)
     {
@@ -478,7 +583,7 @@ static esp_err_t iniciar_sensorLuz(uint8_t slave_addr, uint8_t reg_addr, size_t 
     i2c_cmd_link_delete(cmd2);
     if (ret2 == ESP_OK)
     {
-       ESP_LOGI(TAG, "Inicialización Sensor Lumen B exitoso");
+        ESP_LOGI(TAG, "Inicialización Sensor Lumen B exitoso");
     }
     else if (ret2 == ESP_ERR_TIMEOUT)
     {
@@ -514,7 +619,7 @@ static esp_err_t iniciar_sensorLuz(uint8_t slave_addr, uint8_t reg_addr, size_t 
     i2c_cmd_link_delete(cmd3);
     if (ret3 == ESP_OK)
     {
-       ESP_LOGI(TAG, "Inicialización Sensor Lumen C exitoso");
+        ESP_LOGI(TAG, "Inicialización Sensor Lumen C exitoso");
     }
     else if (ret3 == ESP_ERR_TIMEOUT)
     {
@@ -536,9 +641,9 @@ static esp_err_t iniciar_sensorLuz(uint8_t slave_addr, uint8_t reg_addr, size_t 
     {
         ESP_LOGW(TAG, "Read failed");
     }
-    //register_read_commando(slave_addr, 0x00, 2);
-    //register_read_commando(slave_addr, 0x01, 2);
-    //register_read_commando(slave_addr, 0x02, 2);
+    // register_read_commando(slave_addr, 0x00, 2);
+    // register_read_commando(slave_addr, 0x01, 2);
+    // register_read_commando(slave_addr, 0x02, 2);
 
     return ESP_OK;
 }
@@ -1440,8 +1545,10 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(2000)); // Delays para asegurar lecturas ADC correctas
 
         /* Read the register, on power up the register should have the value 0xB5 */
-        ESP_LOGI(TAG, "Procedo a leer I2C de CO2");
-        ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9));
+        // ESP_LOGI(TAG, "Procedo a leer I2C de CO2"); // TO-DO REEMPLAZAR CON EL OTRO SENSOR
+        // ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9));
+        ESP_LOGI(TAG, "Procedo a leer I2C de TempHum"); // TO-DO REEMPLAZAR CON EL OTRO SENSOR
+        ESP_ERROR_CHECK(tempHum_register_read(TEMPHUM_SENSOR_ADDR, COMANDO_TEMPHUM_MSB, COMANDO_TEMPHUM_LSB, 6));
         ESP_LOGI(TAG, "Procedo a leer I2C de Luminosidad");
         ESP_ERROR_CHECK(register_read_commando(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
 
