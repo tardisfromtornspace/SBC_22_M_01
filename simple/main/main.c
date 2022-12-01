@@ -113,7 +113,7 @@ EN LOS PINES NO PONGAIS DE 6 A 11 QUE ESOS SON DE LA FLASH
 #define MPU9250_PWR_MGMT_1_REG_ADDR 0x6B /*!< Register addresses of the power managment register */
 #define MPU9250_RESET_BIT 7
 
-#define READ_BIT I2C_MASTER_READ /*Para el sensor de CO2, sí es extraño*/
+#define READ_BIT I2C_MASTER_READ      /*Bits de lectura y escritura*/
 #define WRITE_BIT I2C_MASTER_WRITE
 #define ACK_CHECK_EN 0x1              /*!< I2C master will check ack from slave*/
 #define ACK_CHECK_DIS 0x0             /*!< I2C master will not check ack from slave */
@@ -155,8 +155,8 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 /* The HTTP/2 server to connect to */
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
-#define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
-#define CHATTOKEN "-891728903"               //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define TELEGRAMTOKEN "5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY" //"CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define CHATTOKEN "5983287334"//"-891728903"                                         //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 #define UNIVERSITY "SBC22_M01"                                         //"UPM"
 #define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
 #define MQTTURI "mqtt://demo.thingsboard.io"
@@ -284,57 +284,29 @@ static esp_err_t i2c_master_init(void)
  */
 static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len) // , uint8_t *data
 {
-    // i2c_driver_install(i2c_master_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
-    //   ESP_ERROR_CHECK(i2c_master_init());
-    /*
+
+    uint8_t dato[9] = { 1, 2, 3, 4, 5, 6, 7, 8, 9};
+
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    // Primero hacemos que el sensor nos lea el comando
     ESP_ERROR_CHECK(i2c_master_start(cmd));
-    //i2c_master_write_byte(cmd, 0xFF, ACK_CHECK_DIS); // POSSIBLE FIXUP FOR SOME FAULTY THINGS
-    ESP_ERROR_CHECK(i2c_master_start(cmd));
-    i2c_master_write_byte(cmd, (slave_addr << 1) |  READ_BIT, ACK_CHECK_EN); // En el datasheet dice no usar el bit write (slave_addr << 1) | READ_BIT,
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) | READ_BIT, ACK_VAL));
+
     int i = 0;
     for (i = 0; i < len - 1; i++)
-    { // Solo son 2 datos
-        i2c_master_read_byte(cmd, &data[i], ACK_VAL);
-        // i2c_master_read(cmd, &data[i], len - 1, ACK_VAL);
+    {
+        ESP_ERROR_CHECK(i2c_master_read_byte(cmd, &dato[i], ACK_VAL));
     }
-    i2c_master_read_byte(cmd, &data[len - 1], NACK_VAL);
-    */
-    // i2c_master_read(cmd, &data[len - 1], 1, NACK_VAL); // data + len - 1
-    /*
-        esp_err_t espRc;
+    ESP_ERROR_CHECK(i2c_master_read_byte(cmd, &dato[len - 1], NACK_VAL));
+    ESP_ERROR_CHECK(i2c_master_stop(cmd));
 
-        i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, slave_addr << 1 | WRITE_BIT, ACK_CHECK_EN);
-
-        // Setup the read
-        i2c_master_start(cmd);
-        i2c_master_write_byte(cmd, icAddress << 1 | READ_BIT, ACK_CHECK_EN);
-        i2c_master_read_byte(cmd, data, NACK_VAL);
-        i2c_master_stop(cmd);
-
-        // Shoot it out
-        espRc = i2c_master_cmd_begin(I2C_NUM_0, cmd, 1000 / portTICK_RATE_MS);
-        i2c_cmd_link_delete(cmd);
-    */
-    // i2c_master_stop(cmd);
-    // esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
-    // i2c_cmd_link_delete(cmd);
-
-    esp_err_t ret = i2c_master_read_from_device(
-        I2C_MASTER_NUM,
-        slave_addr,
-        data,
-        len,
-        pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
-
+    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(1500));
+    i2c_cmd_link_delete(cmd);
     if (ret == ESP_OK)
     {
         for (int i = 0; i < len; i++)
         {
-            printf("0x%02x ", data[i]);
+            printf("0x%02x ", dato[i]);
             if ((i + 1) % 16 == 0)
             {
                 printf("\r\n");
@@ -349,16 +321,27 @@ static esp_err_t register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len)
     {
         ESP_LOGW(TAG, "Bus is busy");
     }
+    else if (ret == ESP_ERR_INVALID_ARG)
+    {
+        ESP_LOGW(TAG, "Parameter error");
+    }
+    else if (ret == ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGW(TAG, "I2C driver not installed on not in master mode");
+    }
+    else if (ret == ESP_FAIL)
+    {
+        ESP_LOGW(TAG, "Command error, slave hasn't ACK the transfer");
+    }
     else
     {
         ESP_LOGW(TAG, "Read failed");
     }
     ESP_LOGI(TAG, "My ESP-CODE is %d", ret);
-    // free(data);
-    i2c_driver_delete(i2c_master_port);
+    // i2c_driver_delete(i2c_master_port);
 
-    esp_log_buffer_hex(TAG, data, 9);
-    datoI2CCO2legible = data[0] * 256 + data[1];
+    esp_log_buffer_hex(TAG, dato, 9);
+    datoI2CCO2legible = dato[0] * 256 + dato[1];
     ESP_LOGI(TAG, "El CO2 me sale %X", datoI2CCO2legible);
     return ESP_OK;
 }
@@ -435,6 +418,128 @@ static esp_err_t register_read_commando(uint8_t slave_addr, uint8_t reg_addr, si
     datoI2CFotonlegible = dato[1] * 256 + dato[0];
     // free(dato);
     ESP_LOGI(TAG, "El Lumen me sale %X", datoI2CFotonlegible);
+    return ESP_OK;
+}
+
+static esp_err_t iniciar_sensorLuz(uint8_t slave_addr, uint8_t reg_addr, size_t len) // , uint8_t *data
+{
+    /*
+     * El sensor de luminosidad tiene una forma curiosa de funcionar, en vez de enviar su dirección y luego el comando para leer, debes enviar su dirección con intención
+     * de escribir y luego envias la dirección el registro que quieres leer, tras ello envías de nuevo la dirección pero con la intención de leer, y ahora ya recibes los
+     * (2) byte(s) de respuesta
+     */
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    // Inicialización
+    ESP_ERROR_CHECK(i2c_master_start(cmd));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, (slave_addr << 1) | WRITE_BIT, ACK_CHECK_EN));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, 0x00, ACK_CHECK_EN)); // Select the 0x00 register
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, 0x42, ACK_CHECK_EN)); // Write on the 0x00 register lowThreshold 10000, highThreshols 20000 e InteeruptEnable 1 0x0843. El LSB
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd, 0x08, ACK_CHECK_EN)); // El MSB
+    ESP_ERROR_CHECK(i2c_master_stop(cmd));
+
+    esp_err_t ret = i2c_master_cmd_begin(i2c_master_port, cmd, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+    i2c_cmd_link_delete(cmd);
+    if (ret == ESP_OK)
+    {
+       ESP_LOGI(TAG, "Inicialización Sensor Lumen A exitoso");
+    }
+    else if (ret == ESP_ERR_TIMEOUT)
+    {
+        ESP_LOGW(TAG, "Bus is busy");
+    }
+    else if (ret == ESP_ERR_INVALID_ARG)
+    {
+        ESP_LOGW(TAG, "Parameter error");
+    }
+    else if (ret == ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGW(TAG, "I2C driver not installed on not in master mode");
+    }
+    else if (ret == ESP_FAIL)
+    {
+        ESP_LOGW(TAG, "Command error, slave hasn't ACK the transfer");
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Read failed");
+    }
+
+    i2c_cmd_handle_t cmd2 = i2c_cmd_link_create();
+    // Inicialización
+    ESP_ERROR_CHECK(i2c_master_start(cmd2));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd2, (slave_addr << 1) | WRITE_BIT, ACK_CHECK_EN));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd2, 0x01, ACK_CHECK_EN)); // Select the 0x01 register (high threshold)
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd2, 0x20, ACK_CHECK_EN)); // Write on the 0x00 register lowThreshold 10000 (0x2710), highThreshols 2000 (4E20) e InteeruptEnable 1 0x0843. El LSB
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd2, 0x4E, ACK_CHECK_EN)); // El MSB
+    ESP_ERROR_CHECK(i2c_master_stop(cmd2));
+
+    esp_err_t ret2 = i2c_master_cmd_begin(i2c_master_port, cmd2, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+    i2c_cmd_link_delete(cmd2);
+    if (ret2 == ESP_OK)
+    {
+       ESP_LOGI(TAG, "Inicialización Sensor Lumen B exitoso");
+    }
+    else if (ret2 == ESP_ERR_TIMEOUT)
+    {
+        ESP_LOGW(TAG, "Bus is busy");
+    }
+    else if (ret2 == ESP_ERR_INVALID_ARG)
+    {
+        ESP_LOGW(TAG, "Parameter error");
+    }
+    else if (ret2 == ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGW(TAG, "I2C driver not installed on not in master mode");
+    }
+    else if (ret2 == ESP_FAIL)
+    {
+        ESP_LOGW(TAG, "Command error, slave hasn't ACK the transfer");
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Read failed");
+    }
+
+    i2c_cmd_handle_t cmd3 = i2c_cmd_link_create();
+    // Inicialización
+    ESP_ERROR_CHECK(i2c_master_start(cmd3));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd3, (slave_addr << 1) | WRITE_BIT, ACK_CHECK_EN));
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd3, 0x02, ACK_CHECK_EN)); // Select the 0x01 register (low threshold)
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd3, 0x10, ACK_CHECK_EN)); // Write on the 0x00 register lowThreshold 10000 (0x2710), highThreshols 2000 (4E20) e InteeruptEnable 1 0x0843. El LSB
+    ESP_ERROR_CHECK(i2c_master_write_byte(cmd3, 0x27, ACK_CHECK_EN)); // El MSB
+    ESP_ERROR_CHECK(i2c_master_stop(cmd3));
+
+    esp_err_t ret3 = i2c_master_cmd_begin(i2c_master_port, cmd3, pdMS_TO_TICKS(I2C_MASTER_TIMEOUT_MS));
+    i2c_cmd_link_delete(cmd3);
+    if (ret3 == ESP_OK)
+    {
+       ESP_LOGI(TAG, "Inicialización Sensor Lumen C exitoso");
+    }
+    else if (ret3 == ESP_ERR_TIMEOUT)
+    {
+        ESP_LOGW(TAG, "Bus is busy");
+    }
+    else if (ret3 == ESP_ERR_INVALID_ARG)
+    {
+        ESP_LOGW(TAG, "Parameter error");
+    }
+    else if (ret3 == ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGW(TAG, "I2C driver not installed on not in master mode");
+    }
+    else if (ret3 == ESP_FAIL)
+    {
+        ESP_LOGW(TAG, "Command error, slave hasn't ACK the transfer");
+    }
+    else
+    {
+        ESP_LOGW(TAG, "Read failed");
+    }
+    //register_read_commando(slave_addr, 0x00, 2);
+    //register_read_commando(slave_addr, 0x01, 2);
+    //register_read_commando(slave_addr, 0x02, 2);
+
     return ESP_OK;
 }
 
@@ -664,9 +769,9 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
                                                 cJSON *elMensajeDeLectura = cJSON_GetObjectItemCaseSensitive(unMensaje, "text");
                                                 char *auxMensajeC = cJSON_Print(elMensajeDeLectura); // cJSON_Print
 
-                                                printf("Mensaje que tengo: %s , de %d caracteres", auxMensajeC, strlen(auxMensajeC)); // Deja las 2 " y no se pueden quitar con facilidad"
+                                                // printf("Mensaje que tengo: %s , de %d caracteres", auxMensajeC, strlen(auxMensajeC)); // Deja las 2 " y no se pueden quitar con facilidad"
                                                 char *auxMensaja = cutoff(auxMensajeC, 1, strlen(auxMensajeC));
-                                                printf("Mensaje que tengo: %s , de %d caracteres", auxMensaja, strlen(auxMensaja));
+                                                // printf("Mensaje que tengo: %s , de %d caracteres", auxMensaja, strlen(auxMensaja));
                                                 char *auxMensaje = cutoff(auxMensaja, 0, strlen(auxMensaja) - 1);
                                                 printf("Mensaje que tengo: %s , de %d caracteres", auxMensaje, strlen(auxMensaje));
                                                 // RESPUESTA SI TODO VACÍO O MAL:
@@ -720,7 +825,7 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
                                                 }
                                                 else if (strcmp(auxMensaje, cmd4) == 0)
                                                 {
-                                                    sprintf(str, "%s&text=%s : %s: %s Vsolar = %d, Vhidro = %d, Tox pre-filtro = %d, Tox post-filtro = %d. SwitchDisplay = %d", POSTUPDATES, auxMensaje, UNIVERSITY, cmd4Rep, voltajeSolar, voltajeHidro, datoI2CCO2legible, datoI2CCO2legible, s_switch_state);
+                                                    sprintf(str, "%s&text=%s : %s: %s Vsolar = %d, Vhidro = %d, Tox pre-filtro = %d, Tox post-filtro = %d. SwitchDisplay = %d", POSTUPDATES, auxMensaje, UNIVERSITY, cmd4Rep, voltajeSolar, voltajeHidro, datoI2CCO2legible, datoI2CFotonlegible, s_switch_state);
                                                     sh2lib_do_get(handle, str, handle_echo_response);
                                                     s_reset_state = 20;
                                                 }
@@ -795,11 +900,6 @@ int handle_get_response(struct sh2lib_handle *handle, const char *data, size_t l
             conexionEnProceso = 0;
         printf("primer get %d con ini offset = %d: Conexion en proceso = %d", conproc, ini_OFFSET, conexionEnProceso);
     }
-    // int extraOffsetTemp = ini_OFFSET + extraOffset;
-    // char str[256];
-    // vTaskDelete(NULL);
-    // sprintf(str, "/bot%s/getUpdates?offset=%d&limit=1", TELEGRAMTOKEN, extraOffsetTemp);
-    // sh2lib_do_get(handle, str, handle_echo_response);
     return 0;
 }
 
@@ -891,76 +991,39 @@ static void http2_task(void *args)
 /* An HTTP GET handler */
 static esp_err_t root_get_handler(httpd_req_t *req)
 {
-    char mensaje[] = "<h1> Servidor Web </h1>"
-                     "<h1> (Refresh 10 segundos) </h1> <p><a href='/on'><button style='height:50px;width:100px'>ON</button></a></p> <p><a href='/off'><button style='height:50px;width:100px'>OFF</button></a></p><p><a href='/reset'><button style='height:50px;width:100px'>Resetear ESP32</button></a></p><h1>Display switch ";
-    char onSWITCH[] = "ON</h1>";
-    char offSWITCH[] = "OFF</h1>";
-    char voltajeSol[] = "<h1> V sol (mV): ";
-    char voltajeAgua[] = "<h1> V hidro (mV): ";
-    char filtroAntes[] = "<h1> Toxinas pre-filtro (ppm): ";    // TO-DO
-    char filtroDespues[] = "<h1> Toxinas post-filtro (ppm): "; // TO-DO
-    char finEncabezado[] = "</h1>";
-    char reseteo[] = "<h>La ESP32 se va a resetear en ";
-    char finDePagina[] = "";
+    char mensajito[494];
 
+    char finDePagina[] = "";
     const char *mess;
 
     // Esto es para refrescar cada 10 segundos, es la versión válida de "<title>Servidor Especial</title><meta http-equiv='refresh' content='10'>";
     httpd_resp_set_hdr(req, "Refresh", "10");
     httpd_resp_set_type(req, "text/html");
-
-    if (s_switch_state == true)
-    {
-        ESP_LOGI(TAG, "Le digo que tengo switch a ON");
-        strcat(mensaje, onSWITCH);
-    }
-    else
-    {
-        ESP_LOGI(TAG, "Le digo que tengo switch a OFF");
-        strcat(mensaje, offSWITCH);
-    }
-    strcat(mensaje, voltajeSol);
-
-    char voltajeSolecito[sizeof(int) * 8 + 1];
-    itoa(voltajeSolar, voltajeSolecito, 10);
-    strcat(mensaje, voltajeSolecito);
-    strcat(mensaje, finEncabezado);
-    ESP_LOGI(TAG, "Le digo lo del sol");
-
-    strcat(mensaje, voltajeAgua);
-
-    char voltajeAqua[sizeof(int) * 8 + 1];
-    itoa(voltajeHidro, voltajeAqua, 10);
-    strcat(mensaje, voltajeAqua);
-    strcat(mensaje, finEncabezado);
-    ESP_LOGI(TAG, "Le digo lo del agua");
-
-    // TO-DO arreglar extraño bug con el switch, causa que el núcelo entre en pánico si switch está a off y se trata de cambiar el LED
-    // strcat(mensaje, filtroAntes);
-
-    // char co2Lectura[sizeof(int)*8+1];
-    // itoa(datoI2CCO2legible , co2Lectura, 10);
-    // strcat(mensaje, co2Lectura);
-    // strcat(mensaje, finEncabezado);
-
-    // strcat(mensaje, filtroDespues);
-    // char lumenLectura[sizeof(int)*8+1];
-    // itoa(datoI2CCO2legible , lumenLectura, 10);
-    // strcat(mensaje, lumenLectura);
-    // strcat(mensaje, finEncabezado);
-
-    mess = strcat(mensaje, finDePagina);
     if (s_reset_state != 0)
     {
-        const char *resetmess;
-        char tiempo[20];
-        itoa(s_reset_state, tiempo, 10);
-        strcat(reseteo, tiempo);
-        resetmess = strcat(reseteo, "</h1>");
-        httpd_resp_send(req, resetmess, HTTPD_RESP_USE_STRLEN);
+        sprintf(mensajito, "<h1>La ESP32 se va a resetear en %d</h1>", s_reset_state);
+        mess = strcat(mensajito, finDePagina);
+        // httpd_resp_send(req, resetmess, HTTPD_RESP_USE_STRLEN);
     }
     else
-        httpd_resp_send(req, mess, HTTPD_RESP_USE_STRLEN);
+    {
+        char estadoSwitch[] = "N/A";
+        if (s_switch_state == true)
+        {
+            ESP_LOGI(TAG, "Le digo que tengo switch a ON");
+            sprintf(estadoSwitch, " ON");
+        }
+        else
+        {
+            ESP_LOGI(TAG, "Le digo que tengo switch a OFF");
+            sprintf(estadoSwitch, "OFF");
+        }
+
+        sprintf(mensajito, "<h1> Servidor Web </h1><h1> (Refresh 10 segundos) </h1> <p><a href='/on'><button style='height:50px;width:100px'>ON</button></a></p> <p><a href='/off'><button style='height:50px;width:100px'>OFF</button></a></p><p><a href='/reset'><button style='height:50px;width:100px'>Resetear ESP32</button></a></p><h1>Display switch %s</h1><h1> V sol (mV): %d</h1><h1> V hidro (mV): %d</h1><h1> Toxinas pre-filtro (ppm): %d</h1><h1> Toxinas post-filtro (ppm): %d</h1>", estadoSwitch, voltajeSolar, voltajeHidro, datoI2CCO2legible, datoI2CFotonlegible);
+
+        mess = strcat(mensajito, finDePagina);
+    }
+    httpd_resp_send(req, mess, HTTPD_RESP_USE_STRLEN);
 
     return ESP_OK;
 }
@@ -1224,6 +1287,7 @@ void app_main(void)
 
     // iniciar I2C
     ESP_ERROR_CHECK(i2c_master_init());
+    ESP_ERROR_CHECK(iniciar_sensorLuz(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
     ESP_LOGI(TAG, "I2C initialized successfully");
 
     // Iniciar ADC
@@ -1376,8 +1440,8 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(2000)); // Delays para asegurar lecturas ADC correctas
 
         /* Read the register, on power up the register should have the value 0xB5 */
-        // TO-DO ESP_LOGI(TAG, "Procedo a leer I2C de CO2");
-        // ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9));
+        ESP_LOGI(TAG, "Procedo a leer I2C de CO2");
+        ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9));
         ESP_LOGI(TAG, "Procedo a leer I2C de Luminosidad");
         ESP_ERROR_CHECK(register_read_commando(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
 
