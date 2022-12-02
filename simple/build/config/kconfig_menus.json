@@ -2144,6 +2144,26 @@
                 "range": null,
                 "title": "SDA GPIO Num",
                 "type": "int"
+            },
+            {
+                "children": [],
+                "depends_on": "!IDF_TARGET_ESP32C3",
+                "help": "This option enables wake up from deep sleep from GPIO2 and GPIO4. They should be connected to LOW to avoid\nfloating pins. When triggering a wake up, connect one or both of the pins to HIGH. Note that floating\npins may trigger a wake up.",
+                "id": "EXAMPLE_EXT1_WAKEUP",
+                "name": "EXAMPLE_EXT1_WAKEUP",
+                "range": null,
+                "title": "Enable wakeup from GPIO (ext1)",
+                "type": "bool"
+            },
+            {
+                "children": [],
+                "depends_on": "IDF_TARGET_ESP32C3",
+                "help": "This option enables wake up from GPIO, only GPIO0~5 can be used to wake up. Be aware that if you use low\nlevel to trigger wakeup, we strongly recommand you to connect external pull-up resistance.",
+                "id": "EXAMPLE_GPIO_WAKEUP",
+                "name": "EXAMPLE_GPIO_WAKEUP",
+                "range": null,
+                "title": "Enable wakeup from GPIO",
+                "type": "bool"
             }
         ],
         "depends_on": null,

@@ -50,7 +50,6 @@
 #include <stddef.h>
 #include "esp_wifi.h"
 #include "esp_system.h"
-#include "nvs_flash.h"
 #include "esp_event.h"
 
 #include "freertos/FreeRTOS.h"
@@ -167,7 +166,7 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 /* The HTTP/2 server to connect to */
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
-#define TELEGRAMTOKEN "5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY" //"CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 #define CHATTOKEN "-891728903"               //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 #define UNIVERSITY "SBC22_M01"               //"UPM"
 #define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
@@ -1397,7 +1396,7 @@ void sleepDelDisplay(void)
     const int ext_wakeup_pin_1 = 2;
     const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
 
-    printf("Enabling EXT1 wakeup on pin GPIO%d, GPIO%d\n", ext_wakeup_pin_1);
+    printf("Enabling EXT1 wakeup on pin GPIO%d\n", ext_wakeup_pin_1);
     esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
 
     /* If there are no external pull-up/downs, tie wakeup pins to inactive level with internal pull-up/downs via RTC IO
@@ -1569,14 +1568,14 @@ void app_main(void)
     /*
     * Cosas del Sleep TO-DO
     */
-    deQueMeLevante(sleep_time_ms);
+    //deQueMeLevante(sleep_time_ms);
     // Sleep segun el boton del display TO-DO
-    sleepDelDisplay();
+    //sleepDelDisplay();
 
     //Sleep de 20 segundos
-    const int wakeup_time_sec = 20;
-    printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-    esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+    //const int wakeup_time_sec = 20;
+    //printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
+    //esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
 
     /*
      * Registrar handlers de evento para montar el servidor cuando se conectan el Wi-Di o Ethernet, y parar cuando se desconecta.
@@ -1707,9 +1706,9 @@ void app_main(void)
         mqtt_app_start();
 
         // TO-DO Light sleep de varios segundos por RTC? AJUSTAR A LIGHT SLEEP
-        printf("Entering deep sleep\n");
-        gettimeofday(&sleep_enter_time, NULL);
-        esp_light_sleep_start();
-        esp_deep_sleep_start();
+        //printf("Entering deep sleep\n");
+        //gettimeofday(&sleep_enter_time, NULL);
+        //esp_light_sleep_start();
+        //esp_deep_sleep_start();
     }
 }

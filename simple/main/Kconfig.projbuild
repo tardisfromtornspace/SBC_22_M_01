@@ -65,4 +65,21 @@ menu "Example Configuration"
             help
                 GPIO number for I2C Master data line.
 
+    config EXAMPLE_EXT1_WAKEUP
+            bool "Enable wakeup from GPIO (ext1)"
+            default y
+            depends on !IDF_TARGET_ESP32C3
+            help
+                This option enables wake up from deep sleep from GPIO2 and GPIO4. They should be connected to LOW to avoid
+                floating pins. When triggering a wake up, connect one or both of the pins to HIGH. Note that floating
+                pins may trigger a wake up.
+
+    config EXAMPLE_GPIO_WAKEUP
+        bool "Enable wakeup from GPIO"
+        default y
+        depends on IDF_TARGET_ESP32C3
+        help
+                This option enables wake up from GPIO, only GPIO0~5 can be used to wake up. Be aware that if you use low
+                level to trigger wakeup, we strongly recommand you to connect external pull-up resistance.
+
 endmenu
