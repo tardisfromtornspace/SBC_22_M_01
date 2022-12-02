@@ -76,6 +76,14 @@
 
 #include "sh2lib.h"
 
+// Para los sleep
+#include <time.h>
+#include "soc/soc_caps.h"
+#include "esp_sleep.h"
+#include "driver/rtc_io.h"
+#include "soc/rtc.h"
+#include "esp32/ulp.h"
+
 /* A simple example that demonstrates how to create GET and POST
  * handlers and start an HTTPS server.
  */
@@ -83,7 +91,7 @@
 static const char *TAG = "ServidorSimple";
 
 // LED
-#define PIN_SWITCH 35
+#define PIN_SWITCH 2 // 35 // TO-DO Si aplicamos lo de la optimización, se puede hacer para despertar al procesador cuando se activa el switch del display (recomendable cambiar el switch a otro pin, sin embargo).
 #define BLINK_GPIO CONFIG_BLINK_GPIO
 // Fin del LED
 
@@ -159,9 +167,9 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 /* The HTTP/2 server to connect to */
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
-#define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
-#define CHATTOKEN "-891728903"                                         //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
-#define UNIVERSITY "SBC22_M01"                                         //"UPM"
+#define TELEGRAMTOKEN "5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY" //"CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define CHATTOKEN "-891728903"               //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define UNIVERSITY "SBC22_M01"               //"UPM"
 #define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
 #define MQTTURI "mqtt://demo.thingsboard.io"
 int ini_OFFSET = 0;                // El offset inicial TO-DO alterar con memoria guardada
@@ -173,6 +181,9 @@ int conproc = -1;
 // DESCOMENTA static const char GETBOT[] = "/bot" TELEGRAMTOKEN "/";
 // static const char GETUPDATES[] = "/bot" TELEGRAMTOKEN "/getUpdates?limit=5";
 static const char POSTUPDATES[] = "/bot" TELEGRAMTOKEN "/sendMessage?chat_id=" CHATTOKEN;
+
+// Sleeps
+static RTC_DATA_ATTR struct timeval sleep_enter_time;
 
 // LEDes y algunos datos
 
@@ -353,7 +364,7 @@ static esp_err_t CO2_register_read(uint8_t slave_addr, uint8_t reg_addr, size_t 
 static esp_err_t tempHum_register_read(uint8_t slave_addr, uint8_t reg_addrMSB, uint8_t reg_addrLSB, size_t len) // Los dispositivos que requieren de clock stretching no son soportados por ESP32 bien TO-DO cambiar al tercr sensor
 {
 
-    uint8_t dato[6] = {1, 2, 3, 4, 5, 6};
+    uint8_t dato[6] = {1, 2, 3, 4, 5, 6}; // El primero y segundo son temepratura, el 4 y 5 humedad. el 3 y 6 son checksum
 
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     // Primero hacemos que el sensor nos lea el comando
@@ -446,8 +457,8 @@ static esp_err_t tempHum_register_read(uint8_t slave_addr, uint8_t reg_addrMSB, 
     ESP_LOGI(TAG, "My ESP-CODE is %d", ret);
 
     esp_log_buffer_hex(TAG, dato, len);
-    datoI2CCO2legible = dato[0] * 256 + dato[1];
-    ESP_LOGI(TAG, "El CO2 me sale %X", datoI2CCO2legible);
+    datoI2CCO2legible = dato[3] * 256 + dato[4]; // Este sensor manda primero el MSB y luego el LSB
+    ESP_LOGI(TAG, "Lectura de humedad me sale %X", datoI2CCO2legible);
     return ESP_OK;
 }
 
@@ -1380,9 +1391,128 @@ static void configure_analog(void)
     gpio_set_direction(PIN_ANALOG2, GPIO_MODE_INPUT);
 }
 
+void sleepDelDisplay(void)
+{
+#ifdef CONFIG_EXAMPLE_EXT1_WAKEUP
+    const int ext_wakeup_pin_1 = 2;
+    const uint64_t ext_wakeup_pin_1_mask = 1ULL << ext_wakeup_pin_1;
+
+    printf("Enabling EXT1 wakeup on pin GPIO%d, GPIO%d\n", ext_wakeup_pin_1);
+    esp_sleep_enable_ext1_wakeup(ext_wakeup_pin_1_mask, ESP_EXT1_WAKEUP_ANY_HIGH);
+
+    /* If there are no external pull-up/downs, tie wakeup pins to inactive level with internal pull-up/downs via RTC IO
+     * during deepsleep. However, RTC IO relies on the RTC_PERIPH power domain. Keeping this power domain on will
+     * increase some power comsumption. */
+#if CONFIG_EXAMPLE_EXT1_USE_INTERNAL_PULLUPS
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+    rtc_gpio_pullup_dis(ext_wakeup_pin_1);
+    rtc_gpio_pulldown_en(ext_wakeup_pin_1);
+#endif // CONFIG_EXAMPLE_EXT1_USE_INTERNAL_PULLUPS
+#endif // CONFIG_EXAMPLE_EXT1_WAKEUP
+}
+void deQueMeLevante(int sleep_time_ms)
+{
+    switch (esp_sleep_get_wakeup_cause())
+    {
+#if CONFIG_EXAMPLE_EXT0_WAKEUP
+    case ESP_SLEEP_WAKEUP_EXT0:
+    {
+        printf("Wake up from ext0\n");
+        break;
+    }
+#endif // CONFIG_EXAMPLE_EXT0_WAKEUP
+#ifdef CONFIG_EXAMPLE_EXT1_WAKEUP
+    case ESP_SLEEP_WAKEUP_EXT1:
+    {
+        uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+        if (wakeup_pin_mask != 0)
+        {
+            int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+            printf("Wake up from GPIO %d\n", pin);
+        }
+        else
+        {
+            printf("Wake up from GPIO\n");
+        }
+        break;
+    }
+#endif // CONFIG_EXAMPLE_EXT1_WAKEUP
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    case ESP_SLEEP_WAKEUP_GPIO:
+    {
+        uint64_t wakeup_pin_mask = esp_sleep_get_gpio_wakeup_status();
+        if (wakeup_pin_mask != 0)
+        {
+            int pin = __builtin_ffsll(wakeup_pin_mask) - 1;
+            printf("Wake up from GPIO %d\n", pin);
+        }
+        else
+        {
+            printf("Wake up from GPIO\n");
+        }
+        break;
+    }
+#endif // SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+    case ESP_SLEEP_WAKEUP_TIMER:
+    {
+        printf("Wake up from timer. Time spent in deep sleep: %dms\n", sleep_time_ms);
+        break;
+    }
+#ifdef CONFIG_EXAMPLE_TOUCH_WAKEUP
+    case ESP_SLEEP_WAKEUP_TOUCHPAD:
+    {
+        printf("Wake up from touch on pad %d\n", esp_sleep_get_touchpad_wakeup_status());
+        break;
+    }
+#endif // CONFIG_EXAMPLE_TOUCH_WAKEUP
+#ifdef CONFIG_EXAMPLE_ULP_TEMPERATURE_WAKEUP
+#if CONFIG_IDF_TARGET_ESP32
+    case ESP_SLEEP_WAKEUP_ULP:
+    {
+        printf("Wake up from ULP\n");
+        int16_t diff_high = (int16_t)ulp_data_read(3);
+        int16_t diff_low = (int16_t)ulp_data_read(4);
+        if (diff_high < 0)
+        {
+            printf("High temperature alarm was triggered\n");
+        }
+        else if (diff_low < 0)
+        {
+            printf("Low temperature alarm was triggered\n");
+        }
+        else
+        {
+            assert(false && "temperature has stayed within limits, but got ULP wakeup\n");
+        }
+        break;
+    }
+#endif // CONFIG_IDF_TARGET_ESP32
+#endif // CONFIG_EXAMPLE_ULP_TEMPERATURE_WAKEUP
+    case ESP_SLEEP_WAKEUP_UNDEFINED:
+    default:
+        printf("Not a deep sleep reset\n");
+    }
+
+#ifdef CONFIG_EXAMPLE_ULP_TEMPERATURE_WAKEUP
+#if CONFIG_IDF_TARGET_ESP32
+    if (esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED)
+    {
+        printf("ULP did %d temperature measurements in %d ms\n", ulp_data_read(1), sleep_time_ms);
+        printf("Initial T=%d, latest T=%d\n", ulp_data_read(0), ulp_data_read(2));
+    }
+#endif // CONFIG_IDF_TARGET_ESP32
+#endif // CONFIG_EXAMPLE_ULP_TEMPERATURE_WAKEUP
+}
+
 // PROGRAMA PRINCIPAL
 void app_main(void)
 {
+    /*
+    * Información del sleep
+    */
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    int sleep_time_ms = (now.tv_sec - sleep_enter_time.tv_sec) * 1000 + (now.tv_usec - sleep_enter_time.tv_usec) / 1000;
     /*
      * Configurar periféricos, LED, switch y los inputs analógicos
      */
@@ -1437,6 +1567,18 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     /*
+    * Cosas del Sleep TO-DO
+    */
+    deQueMeLevante(sleep_time_ms);
+    // Sleep segun el boton del display TO-DO
+    sleepDelDisplay();
+
+    //Sleep de 20 segundos
+    const int wakeup_time_sec = 20;
+    printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
+    esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+
+    /*
      * Registrar handlers de evento para montar el servidor cuando se conectan el Wi-Di o Ethernet, y parar cuando se desconecta.
      */
 
@@ -1463,7 +1605,7 @@ void app_main(void)
 
     // Task HTTP2 para Telegram
     xTaskCreate(&http2_task, "http2_task", (1024 * 32), NULL, 5, NULL);
-
+    
     // Task mqtt? TO-DO?
     //  xTaskCreate(mqtt_app_start, "mqtt_send_data_0", 1024 * 2, (void *)0, 10, NULL);
 
@@ -1563,5 +1705,11 @@ void app_main(void)
          *MQTT: los datos obtenidos los mandamos a Thingsboard
          */
         mqtt_app_start();
+
+        // TO-DO Light sleep de varios segundos por RTC? AJUSTAR A LIGHT SLEEP
+        printf("Entering deep sleep\n");
+        gettimeofday(&sleep_enter_time, NULL);
+        esp_light_sleep_start();
+        esp_deep_sleep_start();
     }
 }

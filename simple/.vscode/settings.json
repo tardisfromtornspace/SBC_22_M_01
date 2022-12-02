@@ -15,6 +15,17 @@
     "sstream": "c",
     "regex": "c",
     "string.h": "c",
-    "*.ipp": "c"
+    "*.ipp": "c",
+    "stdlib.h": "c",
+    "time.h": "c",
+    "sdkconfig.h": "c",
+    "soc_caps.h": "c",
+    "freertos.h": "c",
+    "task.h": "c",
+    "esp_sleep.h": "c",
+    "esp_log.h": "c",
+    "adc.h": "c",
+    "rtc.h": "c",
+    "ulp.h": "c"
   }
 }
