@@ -1,4 +1,4 @@
-# Install script for directory: C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/components/sh2lib
+# Install script for directory: C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple/components/sh2lib
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
