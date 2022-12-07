@@ -1,4 +1,4 @@
-# Install script for directory: C:/Espressif/frameworks/esp-idf-v4.4.2/components/nghttp
+# Install script for directory: C:/Espressif/frameworks/esp-idf-v4.4.1/components/nghttp
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

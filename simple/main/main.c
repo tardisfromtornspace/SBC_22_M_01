@@ -83,6 +83,10 @@
 #include "soc/rtc.h"
 #include "esp32/ulp.h"
 
+//Para display
+#include "ssd1306.h"
+#include "font8x8_basic.h"
+
 /* A simple example that demonstrates how to create GET and POST
  * handlers and start an HTTPS server.
  */
@@ -171,8 +175,8 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 #define UNIVERSITY "SBC22_M01"               //"UPM"
 #define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
 #define MQTTURI "mqtt://demo.thingsboard.io"
-int ini_OFFSET = 0;                // El offset inicial TO-DO alterar con memoria guardada
-int last_msg_received = 559291163; // El último recibido TO-DO alterar con memoria guardada
+int ini_OFFSET = 0;                
+int last_msg_received = 559291163; 
 int extraOffset = 0;
 int conexionEnProceso = 1;
 int conproc = -1;
@@ -271,7 +275,6 @@ static void configure_switch(void)
     gpio_set_direction(PIN_SWITCH, GPIO_MODE_INPUT);
 }
 
-// I2C TO-DO Comprobar con otro sensor de CO2
 /**
  * @brief i2c master initialization
  */
@@ -296,7 +299,7 @@ static esp_err_t i2c_master_init(void)
 /**
  * @brief Read a sequence of bytes from a sensor register
  */
-static esp_err_t CO2_register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len) // Los dispositivos que requieren de clock stretching no son soportados por ESP32 bien TO-DO cambiar al tercr sensor
+static esp_err_t CO2_register_read(uint8_t slave_addr, uint8_t reg_addr, size_t len) // Los dispositivos que requieren de clock stretching no son soportados por ESP32 bien, cambiamos a un tercer sensor
 {
 
     uint8_t dato[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -360,7 +363,7 @@ static esp_err_t CO2_register_read(uint8_t slave_addr, uint8_t reg_addr, size_t 
     return ESP_OK;
 }
 
-static esp_err_t tempHum_register_read(uint8_t slave_addr, uint8_t reg_addrMSB, uint8_t reg_addrLSB, size_t len) // Los dispositivos que requieren de clock stretching no son soportados por ESP32 bien TO-DO cambiar al tercr sensor
+static esp_err_t tempHum_register_read(uint8_t slave_addr, uint8_t reg_addrMSB, uint8_t reg_addrLSB, size_t len)
 {
 
     uint8_t dato[6] = {1, 2, 3, 4, 5, 6}; // El primero y segundo son temepratura, el 4 y 5 humedad. el 3 y 6 son checksum
@@ -674,8 +677,6 @@ static esp_err_t display_register_write_byte(uint8_t reg_addr, uint8_t data)
 
 // Fin I2C
 
-// TO-DO ADAPTAR HITO 5 PARA QUE PUEDA ADMITIR EL TELEGRAM
-
 // MQTT
 esp_mqtt_client_config_t mqtt_cfg = {
     .uri = MQTTURI, //"mqtt://demo.thingsboard.io", // api/v1/Y0kg9ua7tm6s4vaB0X1H/telemetry" ?
@@ -733,9 +734,9 @@ static void mqtt_app_start(void)
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "energiaSolar", voltajeSolar);      // En la telemetría de Thingsboard aparecerá
     cJSON_AddNumberToObject(root, "energiaHidraulica", voltajeHidro); // En la telemetría de Thingsboard aparecerá
-    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible);       // En la telemetría de Thingsboard aparecerá lo sacado del I2C TO-DO VERIFICAR
-    cJSON_AddNumberToObject(root, "luzI2C", datoI2CFotonlegible);     // En la telemetría de Thingsboard aparecerá lo sacado del I2C TO-DO VERIFICAR
-    cJSON_AddNumberToObject(root, "botonDisplay", s_switch_state);    // En la telemetría de Thingsboard aparecerá como valor true/false TO-DO VERIFICAR
+    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible);       // En la telemetría de Thingsboard aparecerá lo sacado del I2C 
+    cJSON_AddNumberToObject(root, "luzI2C", datoI2CFotonlegible);     // En la telemetría de Thingsboard aparecerá lo sacado del I2C 
+    cJSON_AddNumberToObject(root, "botonDisplay", s_switch_state);    // En la telemetría de Thingsboard aparecerá como valor true/false
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
     esp_mqtt_client_publish(client, "v1/devices/me/telemetry", post_data, 0, 1, 0); // En v1/devices/me/telemetry sale de la MQTT Device API Reference de ThingsBoard
@@ -1523,6 +1524,8 @@ void app_main(void)
     ESP_ERROR_CHECK(i2c_master_init());
     ESP_ERROR_CHECK(iniciar_sensorLuz(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
     ESP_LOGI(TAG, "I2C initialized successfully");
+    // Variable auxiliar del I2C display
+    char lineChar[20];
 
     // Iniciar ADC
 #if CONFIG_IDF_TARGET_ESP32 // El WiFi usa en adc2 así que no podemos usar ese segundo módulo, mejor multiplexamos el adc1 y hay variables qur no necesitamos usar
@@ -1616,15 +1619,23 @@ void app_main(void)
      */
     while (1)
     {
+        SSD1306_t dev;
         if (gpio_get_level(PIN_SWITCH))
         {
             s_switch_state = true; // Este estado se usa para encender o apagar el LCD TO-DO El que se encargue del I2C que meta esto.
             ESP_LOGI(TAG, "Switch display: ON");
+            ssd1306_contrast(&dev, 0xff);
+            lineChar[0] = 0x01;
+            sprintf(&lineChar[1], "Tox prefiltro:  %02d", datoI2CCO2legible);
+            sprintf(&lineChar[2], "Tox postfiltro:  %02d", datoI2CFotonlegible);
+            sprintf(&lineChar[3], "VoltajeHidro:  %02d", voltajeHidro);
+            sprintf(&lineChar[4], "VoltajeSolar:  %02d", voltajeSolar);
         }
         else
         {
             s_switch_state = false;
             ESP_LOGI(TAG, "Switch display: OFF");
+            ssd1306_clear_screen(&dev, false);
         }
         if (s_reset_state != 0)
         {
