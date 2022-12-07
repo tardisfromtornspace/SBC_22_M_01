@@ -94,7 +94,7 @@
 static const char *TAG = "ServidorSimple";
 
 // LED
-#define PIN_SWITCH 2 // 35 // TO-DO Si aplicamos lo de la optimización, se puede hacer para despertar al procesador cuando se activa el switch del display (recomendable cambiar el switch a otro pin, sin embargo).
+#define PIN_SWITCH 2 // 35 // TO-DO TAMPOCO USES EL PIN 2 A MENOS QUE QUIERAS QUE SI EL SWITCH ESTÉ A ON NO SE PUEDA COMUNICAR CON LA FLASH PARA SUBIR PROGRAMAS POR CABLE Si aplicamos lo de la optimización, se puede hacer para despertar al procesador cuando se activa el switch del display (recomendable cambiar el switch a otro pin, sin embargo).
 #define BLINK_GPIO CONFIG_BLINK_GPIO
 // Fin del LED
 
@@ -278,7 +278,7 @@ static void configure_switch(void)
 /**
  * @brief i2c master initialization
  */
-static esp_err_t i2c_master_init(void) // TO-DO Arreglar con el principal de Raúl, necesito el dev
+static esp_err_t i2c_master_init(SSD1306_t * dev, int16_t sda, int16_t scl, int16_t reset) // TO-DO Arreglar con el principal de Raúl, necesita el dev, este se vuelve redundante
 {
 
     i2c_config_t conf = {
@@ -293,9 +293,19 @@ static esp_err_t i2c_master_init(void) // TO-DO Arreglar con el principal de Ra�
 
     ESP_ERROR_CHECK(i2c_param_config(i2c_master_port, &conf));
     ESP_ERROR_CHECK(i2c_driver_install(i2c_master_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, ESP_INTR_FLAG_LEVEL1)); // conf.mode
+
+    if (reset >= 0) {
+		//gpio_pad_select_gpio(reset);
+		gpio_reset_pin(reset);
+		gpio_set_direction(reset, GPIO_MODE_OUTPUT);
+		gpio_set_level(reset, 0);
+		vTaskDelay(50 / portTICK_PERIOD_MS);
+		gpio_set_level(reset, 1);
+	}
+	dev->_address = I2CAddress;
+	dev->_flip = false;
     return ESP_OK;
 }
-
 /**
  * @brief Read a sequence of bytes from a sensor register
  */
@@ -1521,11 +1531,27 @@ void app_main(void)
     configure_analog();
 
     // iniciar I2C
-    ESP_ERROR_CHECK(i2c_master_init()); // TO-DO i2c_master_init(SSD1306_t * dev, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, 0)
+    // Iniciar el display
+    SSD1306_t dev;
+    ESP_ERROR_CHECK(i2c_master_init(&dev, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, 0));
+    //ESP_ERROR_CHECK(i2c_master_init()); // TO-DO 
     ESP_ERROR_CHECK(iniciar_sensorLuz(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
     ESP_LOGI(TAG, "I2C initialized successfully");
-    // Variable auxiliar del I2C display
-    char lineChar[20];
+    // Variables auxiliares del I2C display, e inicialización extra del display
+    char primeralineChar[32];
+    char segundalineChar[32];
+    char terceralineChar[32];
+    char cuartalineChar[32];
+    ssd1306_clear_screen(&dev, false); // El display a 0, no a valores basura
+
+#if CONFIG_SSD1306_128x64
+	ESP_LOGI(TAG, "Panel is 128x64");
+	ssd1306_init(&dev, 128, 64);
+#endif // CONFIG_SSD1306_128x64
+#if CONFIG_SSD1306_128x32
+	ESP_LOGI(TAG, "Panel is 128x32");
+	ssd1306_init(&dev, 128, 32);
+#endif // CONFIG_SSD1306_128x32
 
     // Iniciar ADC
 #if CONFIG_IDF_TARGET_ESP32 // El WiFi usa en adc2 así que no podemos usar ese segundo módulo, mejor multiplexamos el adc1 y hay variables qur no necesitamos usar
@@ -1619,22 +1645,30 @@ void app_main(void)
      */
     while (1)
     {
-        SSD1306_t dev;
         if (gpio_get_level(PIN_SWITCH))
         {
-            s_switch_state = true; // Este estado se usa para encender o apagar el LCD TO-DO El que se encargue del I2C que meta esto.
             ESP_LOGI(TAG, "Switch display: ON");
+            s_switch_state = true; // Este estado se usa para encender o apagar el LCD TO-DO El que se encargue del I2C que meta esto.
             ssd1306_contrast(&dev, 0xff);
-            lineChar[0] = 0x01;
-            sprintf(&lineChar[1], "Tox prefiltro:  %02d", datoI2CCO2legible);
-            sprintf(&lineChar[2], "Tox postfiltro:  %02d", datoI2CFotonlegible);
-            sprintf(&lineChar[3], "VoltajeHidro:  %02d", voltajeHidro);
-            sprintf(&lineChar[4], "VoltajeSolar:  %02d", voltajeSolar);
+            sprintf(primeralineChar, "Tox pre:  %02d", datoI2CCO2legible);
+            sprintf(segundalineChar, "Tox pos:  %02d", datoI2CFotonlegible);
+            sprintf(terceralineChar, "V Hidro:  %02d", voltajeHidro);
+            sprintf(cuartalineChar,  "V Solar:  %02d", voltajeSolar);
+            ssd1306_display_text(&dev, 0, primeralineChar, 32, false);
+	        ssd1306_display_text(&dev, 1, segundalineChar, 32, false);
+	        ssd1306_display_text(&dev, 2, terceralineChar, 32, false);
+	        ssd1306_display_text(&dev, 3, cuartalineChar, 32, false);
+#if CONFIG_SSD1306_128x64
+            ssd1306_display_text(&dev, 4, "                ", 32, false);
+	        ssd1306_display_text(&dev, 5, "     GyFhi      ", 32, false);
+	        ssd1306_display_text(&dev, 6, "                ", 32, false);
+	        ssd1306_display_text(&dev, 7, "     U.P.M.     ", 32, false);
+#endif // CONFIG_SSD1306_128x32
         }
         else
         {
-            s_switch_state = false;
             ESP_LOGI(TAG, "Switch display: OFF");
+            s_switch_state = false;
             ssd1306_clear_screen(&dev, false);
         }
         if (s_reset_state != 0)

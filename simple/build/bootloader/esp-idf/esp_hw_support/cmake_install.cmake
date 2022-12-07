@@ -1,4 +1,4 @@
-# Install script for directory: C:/Espressif/frameworks/esp-idf-v4.4.1/components/esp_hw_support
+# Install script for directory: C:/Espressif/frameworks/esp-idf-v4.4.2/components/esp_hw_support
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -39,7 +39,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
-  include("C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple/build/bootloader/esp-idf/esp_hw_support/port/esp32/cmake_install.cmake")
+  include("C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/bootloader/esp-idf/esp_hw_support/port/esp32/cmake_install.cmake")
 
 endif()
 

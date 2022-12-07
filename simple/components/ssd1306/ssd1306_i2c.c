@@ -17,15 +17,16 @@
 #define I2C_MASTER_FREQ_HZ 800000 /*!< I2C master clock frequency. no higher than 1MHz for now */
 //#define I2C_MASTER_FREQ_HZ 1000000 /*!< I2C master clock frequency. no higher than 1MHz for now */
 
-void i2c_master_init(SSD1306_t * dev, int16_t sda, int16_t scl, int16_t reset) // TO-DO Arreglar con el principal de Raúl
+/*static esp_err_t i2c_master_init(SSD1306_t * dev, int16_t sda, int16_t scl, int16_t reset) // TO-DO Arreglar con el principal de Raúl
 {
 	i2c_config_t i2c_config = {
 		.mode = I2C_MODE_MASTER,
 		.sda_io_num = sda,
 		.scl_io_num = scl,
-		.sda_pullup_en = GPIO_PULLUP_ENABLE,
-		.scl_pullup_en = GPIO_PULLUP_ENABLE,
-		.master.clk_speed = I2C_MASTER_FREQ_HZ
+		.sda_pullup_en = GPIO_PULLUP_DISABLE, //GPIO_PULLUP_ENABLE,
+		.scl_pullup_en = GPIO_PULLUP_DISABLE, //GPIO_PULLUP_ENABLE,
+		.master.clk_speed = I2C_MASTER_FREQ_HZ,
+		.clk_flags = 0, // ANIADIDO POR NOSOTROS TO-DO
 	};
 	ESP_ERROR_CHECK(i2c_param_config(I2C_NUM, &i2c_config));
 	ESP_ERROR_CHECK(i2c_driver_install(I2C_NUM, I2C_MODE_MASTER, 0, 0, 0));
@@ -40,7 +41,8 @@ void i2c_master_init(SSD1306_t * dev, int16_t sda, int16_t scl, int16_t reset) /
 	}
 	dev->_address = I2CAddress;
 	dev->_flip = false;
-}
+	return ESP_OK; // TO-DO Alterado por nosotros
+}*/
 
 void i2c_init(SSD1306_t * dev, int width, int height) {
 	dev->_width = width;

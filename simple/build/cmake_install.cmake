@@ -1,4 +1,4 @@
-# Install script for directory: C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple
+# Install script for directory: C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -39,7 +39,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
-  include("C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple/build/esp-idf/cmake_install.cmake")
+  include("C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/esp-idf/cmake_install.cmake")
 
 endif()
 
@@ -51,5 +51,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

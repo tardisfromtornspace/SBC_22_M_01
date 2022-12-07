@@ -1,4 +1,4 @@
-# Install script for directory: C:/Espressif/frameworks/esp-idf-v4.4.1/components/esp_hw_support/port/esp32
+# Install script for directory: C:/Espressif/frameworks/esp-idf-v4.4.2/components/esp_hw_support/port/esp32
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

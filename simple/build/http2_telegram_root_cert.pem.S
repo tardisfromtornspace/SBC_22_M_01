@@ -1,4 +1,4 @@
-/* * Data converted from C:/Users/raulp/OneDrive/Escritorio/SBC_22_M_01/simple/main/certs/http2_telegram_root_cert.pem
+/* * Data converted from C:/ASL/Universidad/4to_curso/SBC/TestGithub/SBC_22_M_01/simple/main/certs/http2_telegram_root_cert.pem
  * (null byte appended)
  */
 .data

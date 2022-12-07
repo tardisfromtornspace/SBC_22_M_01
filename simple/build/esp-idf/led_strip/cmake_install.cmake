@@ -1,4 +1,4 @@
-# Install script for directory: C:/Espressif/frameworks/esp-idf-v4.4.1/examples/common_components/led_strip
+# Install script for directory: C:/Espressif/frameworks/esp-idf-v4.4.2/examples/common_components/led_strip
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
