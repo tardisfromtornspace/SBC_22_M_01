@@ -278,7 +278,7 @@ static void configure_switch(void)
 /**
  * @brief i2c master initialization
  */
-static esp_err_t i2c_master_init(void)
+static esp_err_t i2c_master_init(void) // TO-DO Arreglar con el principal de Raúl, necesito el dev
 {
 
     i2c_config_t conf = {
@@ -1521,7 +1521,7 @@ void app_main(void)
     configure_analog();
 
     // iniciar I2C
-    ESP_ERROR_CHECK(i2c_master_init());
+    ESP_ERROR_CHECK(i2c_master_init()); // TO-DO i2c_master_init(SSD1306_t * dev, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, 0)
     ESP_ERROR_CHECK(iniciar_sensorLuz(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
     ESP_LOGI(TAG, "I2C initialized successfully");
     // Variable auxiliar del I2C display
