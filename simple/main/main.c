@@ -63,7 +63,7 @@
 // Para I2C
 #include "driver/i2c.h"
 // Para i2c test
-//#include "cmd_i2ctools.h"
+// #include "cmd_i2ctools.h"
 
 // Para mensajes genéricos
 #include <string.h>
@@ -82,8 +82,9 @@
 #include "driver/rtc_io.h"
 #include "soc/rtc.h"
 #include "esp32/ulp.h"
+#include "driver/uart.h"
 
-//Para display
+// Para display
 #include "ssd1306.h"
 #include "font8x8_basic.h"
 
@@ -96,6 +97,8 @@ static const char *TAG = "ServidorSimple";
 // LED
 #define PIN_SWITCH 2 // 35 // TO-DO TAMPOCO USES EL PIN 2 A MENOS QUE QUIERAS QUE SI EL SWITCH ESTÉ A ON NO SE PUEDA COMUNICAR CON LA FLASH PARA SUBIR PROGRAMAS POR CABLE Si aplicamos lo de la optimización, se puede hacer para despertar al procesador cuando se activa el switch del display (recomendable cambiar el switch a otro pin, sin embargo).
 #define BLINK_GPIO CONFIG_BLINK_GPIO
+#define GPIO_WAKEUP_NUM PIN_SWITCH
+#define GPIO_WAKEUP_LEVEL 0
 // Fin del LED
 
 // I2C nota: hemos elegido el 4 y el 0, puede que de incompatibilidades con otros módulos fuera de ESP32
@@ -175,8 +178,8 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 #define UNIVERSITY "SBC22_M01"               //"UPM"
 #define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
 #define MQTTURI "mqtt://demo.thingsboard.io"
-int ini_OFFSET = 0;                
-int last_msg_received = 559291163; 
+int ini_OFFSET = 0;
+int last_msg_received = 559291163;
 int extraOffset = 0;
 int conexionEnProceso = 1;
 int conproc = -1;
@@ -186,7 +189,8 @@ int conproc = -1;
 static const char POSTUPDATES[] = "/bot" TELEGRAMTOKEN "/sendMessage?chat_id=" CHATTOKEN;
 
 // Sleeps
-static RTC_DATA_ATTR struct timeval sleep_enter_time;
+static RTC_DATA_ATTR struct timeval sleep_enter_time; // global
+int contadorAdormir = 0;
 
 // LEDes y algunos datos
 
@@ -278,7 +282,7 @@ static void configure_switch(void)
 /**
  * @brief i2c master initialization
  */
-static esp_err_t i2c_master_init(SSD1306_t * dev, int16_t sda, int16_t scl, int16_t reset) // TO-DO Arreglar con el principal de Raúl, necesita el dev, este se vuelve redundante
+static esp_err_t i2c_master_init(SSD1306_t *dev, int16_t sda, int16_t scl, int16_t reset) // TO-DO Arreglar con el principal de Raúl, necesita el dev, este se vuelve redundante
 {
 
     i2c_config_t conf = {
@@ -294,16 +298,17 @@ static esp_err_t i2c_master_init(SSD1306_t * dev, int16_t sda, int16_t scl, int1
     ESP_ERROR_CHECK(i2c_param_config(i2c_master_port, &conf));
     ESP_ERROR_CHECK(i2c_driver_install(i2c_master_port, I2C_MODE_MASTER, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, ESP_INTR_FLAG_LEVEL1)); // conf.mode
 
-    if (reset >= 0) {
-		//gpio_pad_select_gpio(reset);
-		gpio_reset_pin(reset);
-		gpio_set_direction(reset, GPIO_MODE_OUTPUT);
-		gpio_set_level(reset, 0);
-		vTaskDelay(50 / portTICK_PERIOD_MS);
-		gpio_set_level(reset, 1);
-	}
-	dev->_address = I2CAddress;
-	dev->_flip = false;
+    if (reset >= 0)
+    {
+        // gpio_pad_select_gpio(reset);
+        gpio_reset_pin(reset);
+        gpio_set_direction(reset, GPIO_MODE_OUTPUT);
+        gpio_set_level(reset, 0);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+        gpio_set_level(reset, 1);
+    }
+    dev->_address = I2CAddress;
+    dev->_flip = false;
     return ESP_OK;
 }
 /**
@@ -744,8 +749,8 @@ static void mqtt_app_start(void)
     cJSON *root = cJSON_CreateObject();
     cJSON_AddNumberToObject(root, "energiaSolar", voltajeSolar);      // En la telemetría de Thingsboard aparecerá
     cJSON_AddNumberToObject(root, "energiaHidraulica", voltajeHidro); // En la telemetría de Thingsboard aparecerá
-    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible);       // En la telemetría de Thingsboard aparecerá lo sacado del I2C 
-    cJSON_AddNumberToObject(root, "luzI2C", datoI2CFotonlegible);     // En la telemetría de Thingsboard aparecerá lo sacado del I2C 
+    cJSON_AddNumberToObject(root, "co2I2C", datoI2CCO2legible);       // En la telemetría de Thingsboard aparecerá lo sacado del I2C
+    cJSON_AddNumberToObject(root, "luzI2C", datoI2CFotonlegible);     // En la telemetría de Thingsboard aparecerá lo sacado del I2C
     cJSON_AddNumberToObject(root, "botonDisplay", s_switch_state);    // En la telemetría de Thingsboard aparecerá como valor true/false
     char *post_data = cJSON_PrintUnformatted(root);
     // Enviar los datos
@@ -1083,7 +1088,7 @@ static void http2_task(void *args)
         if (sh2lib_connect(&cfg, &hd) != 0)
         {
             printf("Failed to connect\n");
-            vTaskDelete(NULL);
+            vTaskDelete(NULL); // TO-DO ver si se puede quitar o poner de forma que al cerrarse active una variable global que indique durante algún ciclo que debe reiniciarse.
             return;
         }
         printf("Connection done\n");
@@ -1518,8 +1523,8 @@ void deQueMeLevante(int sleep_time_ms)
 void app_main(void)
 {
     /*
-    * Información del sleep
-    */
+     * Información del sleep
+     */
     struct timeval now;
     gettimeofday(&now, NULL);
     int sleep_time_ms = (now.tv_sec - sleep_enter_time.tv_sec) * 1000 + (now.tv_usec - sleep_enter_time.tv_usec) / 1000;
@@ -1534,7 +1539,7 @@ void app_main(void)
     // Iniciar el display
     SSD1306_t dev;
     ESP_ERROR_CHECK(i2c_master_init(&dev, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, 0));
-    //ESP_ERROR_CHECK(i2c_master_init()); // TO-DO 
+    // ESP_ERROR_CHECK(i2c_master_init()); // TO-DO
     ESP_ERROR_CHECK(iniciar_sensorLuz(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
     ESP_LOGI(TAG, "I2C initialized successfully");
     // Variables auxiliares del I2C display, e inicialización extra del display
@@ -1545,12 +1550,12 @@ void app_main(void)
     ssd1306_clear_screen(&dev, false); // El display a 0, no a valores basura
 
 #if CONFIG_SSD1306_128x64
-	ESP_LOGI(TAG, "Panel is 128x64");
-	ssd1306_init(&dev, 128, 64);
+    ESP_LOGI(TAG, "Panel is 128x64");
+    ssd1306_init(&dev, 128, 64);
 #endif // CONFIG_SSD1306_128x64
 #if CONFIG_SSD1306_128x32
-	ESP_LOGI(TAG, "Panel is 128x32");
-	ssd1306_init(&dev, 128, 32);
+    ESP_LOGI(TAG, "Panel is 128x32");
+    ssd1306_init(&dev, 128, 32);
 #endif // CONFIG_SSD1306_128x32
 
     // Iniciar ADC
@@ -1595,16 +1600,16 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     /*
-    * Cosas del Sleep TO-DO
-    */
-    //deQueMeLevante(sleep_time_ms);
-    // Sleep segun el boton del display TO-DO
-    //sleepDelDisplay();
+     * Cosas del Sleep TO-DO
+     */
+    // deQueMeLevante(sleep_time_ms);
+    //  Sleep segun el boton del display
+    sleepDelDisplay();
 
-    //Sleep de 20 segundos
-    //const int wakeup_time_sec = 20;
-    //printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-    //esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
+    // Sleep de 60 segundos
+    const int wakeup_time_sec = 60;
+    printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
+    // esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
 
     /*
      * Registrar handlers de evento para montar el servidor cuando se conectan el Wi-Di o Ethernet, y parar cuando se desconecta.
@@ -1633,7 +1638,7 @@ void app_main(void)
 
     // Task HTTP2 para Telegram
     xTaskCreate(&http2_task, "http2_task", (1024 * 32), NULL, 5, NULL);
-    
+
     // Task mqtt? TO-DO?
     //  xTaskCreate(mqtt_app_start, "mqtt_send_data_0", 1024 * 2, (void *)0, 10, NULL);
 
@@ -1653,16 +1658,16 @@ void app_main(void)
             sprintf(primeralineChar, " Tox pre: %02d", datoI2CCO2legible);
             sprintf(segundalineChar, " Tox pos: %02d", datoI2CFotonlegible);
             sprintf(terceralineChar, " V Hidro: %02d", voltajeHidro);
-            sprintf(cuartalineChar,  " V Solar: %02d", voltajeSolar);
+            sprintf(cuartalineChar, " V Solar: %02d", voltajeSolar);
             ssd1306_display_text(&dev, 0, primeralineChar, 32, false);
-	        ssd1306_display_text(&dev, 1, segundalineChar, 32, false);
-	        ssd1306_display_text(&dev, 2, terceralineChar, 32, false);
-	        ssd1306_display_text(&dev, 3, cuartalineChar, 32, false);
+            ssd1306_display_text(&dev, 1, segundalineChar, 32, false);
+            ssd1306_display_text(&dev, 2, terceralineChar, 32, false);
+            ssd1306_display_text(&dev, 3, cuartalineChar, 32, false);
 #if CONFIG_SSD1306_128x64
             ssd1306_display_text(&dev, 4, "                ", 32, false);
-	        ssd1306_display_text(&dev, 5, "     GyFhi      ", 32, false);
-	        ssd1306_display_text(&dev, 6, "                ", 32, false);
-	        ssd1306_display_text(&dev, 7, "     U.P.M.     ", 32, false);
+            ssd1306_display_text(&dev, 5, "     GyFhi      ", 32, false);
+            ssd1306_display_text(&dev, 6, "                ", 32, false);
+            ssd1306_display_text(&dev, 7, "     U.P.M.     ", 32, false);
 #endif // CONFIG_SSD1306_128x32
         }
         else
@@ -1739,32 +1744,70 @@ void app_main(void)
         ESP_ERROR_CHECK(register_read_commando(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
 
         vTaskDelay(pdMS_TO_TICKS(1000)); // El I2C puede tardar hasta 11 segundos
-        /* Demonstrate writing by reseting the MPU9250 */
-        //    ESP_ERROR_CHECK(mpu9250_register_write_byte(MPU9250_PWR_MGMT_1_REG_ADDR, 1 << MPU9250_RESET_BIT));
 
-        //    ESP_ERROR_CHECK(i2c_driver_delete(I2C_MASTER_NUM));
-        //    ESP_LOGI(TAG, "I2C unitialized successfully");
+        if (contadorAdormir > 15)
+        {
+            // Hora de dormir para ahorrar energía. Debe ser light sleep y no hacerse todo el rato para no hacer disrupción excesiva en las comunicaciones.
+            // TO-DO Light sleep de varios segundos por RTC? AJUSTAR A LIGHT SLEEP
+            esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000); 
+            printf("Entering light sleep\n");
 
-        /*
-         *MQTT: los datos obtenidos los mandamos a Thingsboard
-         */
-        mqtt_app_start();
+            /* To make sure the complete line is printed before entering sleep mode,
+             * need to wait until UART TX FIFO is empty:
+             */
+            uart_wait_tx_idle_polling(CONFIG_ESP_CONSOLE_UART_NUM);
 
-        // TO-DO Light sleep de varios segundos por RTC? AJUSTAR A LIGHT SLEEP
-        //printf("Entering deep sleep\n");
-        //gettimeofday(&sleep_enter_time, NULL);
-        //esp_light_sleep_start();
-        //esp_deep_sleep_start();
-        printf("Entering light sleep\n");
-        //esp_sleep_enable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
-        esp_light_sleep_start();
+            // esp_sleep_enable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
+            esp_light_sleep_start();
 
-        esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
-		//ESP_LOGD(TAG, "WakeupFrom: %i", cause);
-		if(cause == ESP_SLEEP_WAKEUP_GPIO)
-		{
-			esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
-			//sleepManager_wakeNotify();
-		}
+            /* Get timestamp before entering sleep */
+            int64_t t_before_us = esp_timer_get_time();
+
+            /* Enter sleep mode */
+            esp_light_sleep_start();
+
+            /* Get timestamp after waking up from sleep */
+            int64_t t_after_us = esp_timer_get_time();
+
+            /* Determine wake up reason */
+            const char *wakeup_reason;
+            switch (esp_sleep_get_wakeup_cause())
+            {
+            case ESP_SLEEP_WAKEUP_TIMER:
+                wakeup_reason = "timer";
+                break;
+            case ESP_SLEEP_WAKEUP_GPIO:
+                wakeup_reason = "pin";
+                break;
+            case ESP_SLEEP_WAKEUP_UART:
+                wakeup_reason = "uart";
+                /* Hang-up for a while to switch and execuse the uart task
+                 * Otherwise the chip may fall sleep again before running uart task */
+                vTaskDelay(1);
+                break;
+#if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
+            case ESP_SLEEP_WAKEUP_TOUCHPAD:
+                wakeup_reason = "touch";
+                break;
+#endif
+            default:
+                wakeup_reason = "other";
+                break;
+            }
+            printf("Returned from light sleep, reason: %s, t=%lld ms, slept for %lld ms\n",
+                   wakeup_reason, t_after_us / 1000, (t_after_us - t_before_us) / 1000);
+
+            vTaskDelay(pdMS_TO_TICKS(5000)); // Tras el sleep el wifi está caído, hay que darle tiempo para recuperarse
+            
+            contadorAdormir = 0;
+        }
+        else {
+            /*
+            *MQTT: los datos obtenidos los mandamos a Thingsboard
+            */
+            mqtt_app_start();
+            contadorAdormir++;
+        }
+
     }
 }
