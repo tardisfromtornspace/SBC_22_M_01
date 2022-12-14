@@ -1650,10 +1650,10 @@ void app_main(void)
             ESP_LOGI(TAG, "Switch display: ON");
             s_switch_state = true; // Este estado se usa para encender o apagar el LCD TO-DO El que se encargue del I2C que meta esto.
             ssd1306_contrast(&dev, 0xff);
-            sprintf(primeralineChar, "Tox pre:  %02d", datoI2CCO2legible);
-            sprintf(segundalineChar, "Tox pos:  %02d", datoI2CFotonlegible);
-            sprintf(terceralineChar, "V Hidro:  %02d", voltajeHidro);
-            sprintf(cuartalineChar,  "V Solar:  %02d", voltajeSolar);
+            sprintf(primeralineChar, " Tox pre: %02d", datoI2CCO2legible);
+            sprintf(segundalineChar, " Tox pos: %02d", datoI2CFotonlegible);
+            sprintf(terceralineChar, " V Hidro: %02d", voltajeHidro);
+            sprintf(cuartalineChar,  " V Solar: %02d", voltajeSolar);
             ssd1306_display_text(&dev, 0, primeralineChar, 32, false);
 	        ssd1306_display_text(&dev, 1, segundalineChar, 32, false);
 	        ssd1306_display_text(&dev, 2, terceralineChar, 32, false);
@@ -1755,5 +1755,16 @@ void app_main(void)
         //gettimeofday(&sleep_enter_time, NULL);
         //esp_light_sleep_start();
         //esp_deep_sleep_start();
+        printf("Entering light sleep\n");
+        //esp_sleep_enable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
+        esp_light_sleep_start();
+
+        esp_sleep_wakeup_cause_t cause = esp_sleep_get_wakeup_cause();
+		//ESP_LOGD(TAG, "WakeupFrom: %i", cause);
+		if(cause == ESP_SLEEP_WAKEUP_GPIO)
+		{
+			esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
+			//sleepManager_wakeNotify();
+		}
     }
 }
