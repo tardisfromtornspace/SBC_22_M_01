@@ -173,7 +173,7 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 /* The HTTP/2 server to connect to */
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
-#define TELEGRAMTOKEN "5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY"//"CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 #define CHATTOKEN "-891728903"               //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 #define UNIVERSITY "SBC22_M01"               //"UPM"
 #define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
