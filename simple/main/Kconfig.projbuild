@@ -81,5 +81,10 @@ menu "Example Configuration"
         help
                 This option enables wake up from GPIO, only GPIO0~5 can be used to wake up. Be aware that if you use low
                 level to trigger wakeup, we strongly recommand you to connect external pull-up resistance.
-
+                
+    config LIGHT_SLEEP_ENABLED
+        bool "Enable wakeup from GPIO"
+        default 0 if IDF_TARGET_ESP32
+        help
+                This option enables light sleep
 endmenu

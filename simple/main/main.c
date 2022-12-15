@@ -173,7 +173,7 @@ extern const uint8_t server_rootTelegram_cert_pem_end[] asm("_binary_http2_teleg
 /* The HTTP/2 server to connect to */
 #define HTTP2_SERVER_URI "https://api.telegram.org"
 /* A GET request that keeps streaming current time every second */
-#define TELEGRAMTOKEN "CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
+#define TELEGRAMTOKEN "5846280715:AAGFX4YVxF6cupXcewTaGIlJl_kKilmcbrY"//"CAMBIALO POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 #define CHATTOKEN "-891728903"               //"CAMBIA POR EL TUYO" // TO-DO NO LO SUBAS CON ESTO A LA ENTREGA!!!!
 #define UNIVERSITY "SBC22_M01"               //"UPM"
 #define TOKENMQTT "YSRNEFDXnyIGhX9OaylG"
@@ -191,6 +191,8 @@ static const char POSTUPDATES[] = "/bot" TELEGRAMTOKEN "/sendMessage?chat_id=" C
 // Sleeps
 static RTC_DATA_ATTR struct timeval sleep_enter_time; // global
 int contadorAdormir = 0;
+int sleepEnabled = 0; // Hemos dejado el sleep inhabilitado porque al final no es esencial
+int http2Caido = 0;
 
 // LEDes y algunos datos
 
@@ -282,7 +284,7 @@ static void configure_switch(void)
 /**
  * @brief i2c master initialization
  */
-static esp_err_t i2c_master_init(SSD1306_t *dev, int16_t sda, int16_t scl, int16_t reset) // TO-DO Arreglar con el principal de Raúl, necesita el dev, este se vuelve redundante
+static esp_err_t i2c_master_init(SSD1306_t *dev, int16_t sda, int16_t scl, int16_t reset)
 {
 
     i2c_config_t conf = {
@@ -674,20 +676,6 @@ static esp_err_t iniciar_sensorLuz(uint8_t slave_addr, uint8_t reg_addr, size_t 
     // register_read_commando(slave_addr, 0x02, 2);
 
     return ESP_OK;
-}
-
-/**
- * @brief Write a byte to a MPU9250 sensor register
- * TO-DO Ajustar para el Display
- */
-static esp_err_t display_register_write_byte(uint8_t reg_addr, uint8_t data)
-{
-    int ret;
-    uint8_t write_buf[2] = {reg_addr, data};
-
-    ret = i2c_master_write_to_device(I2C_MASTER_NUM, CO2_SENSOR_ADDR, write_buf, sizeof(write_buf), I2C_MASTER_TIMEOUT_MS / portTICK_RATE_MS);
-
-    return ret;
 }
 
 // Fin I2C
@@ -1088,6 +1076,7 @@ static void http2_task(void *args)
         if (sh2lib_connect(&cfg, &hd) != 0)
         {
             printf("Failed to connect\n");
+            http2Caido = 1;
             vTaskDelete(NULL); // TO-DO ver si se puede quitar o poner de forma que al cerrarse active una variable global que indique durante algún ciclo que debe reiniciarse.
             return;
         }
@@ -1539,7 +1528,7 @@ void app_main(void)
     // Iniciar el display
     SSD1306_t dev;
     ESP_ERROR_CHECK(i2c_master_init(&dev, I2C_MASTER_SDA_IO, I2C_MASTER_SCL_IO, 0));
-    // ESP_ERROR_CHECK(i2c_master_init()); // TO-DO
+    
     ESP_ERROR_CHECK(iniciar_sensorLuz(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
     ESP_LOGI(TAG, "I2C initialized successfully");
     // Variables auxiliares del I2C display, e inicialización extra del display
@@ -1609,7 +1598,6 @@ void app_main(void)
     // Sleep de 60 segundos
     const int wakeup_time_sec = 60;
     printf("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-    // esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000);
 
     /*
      * Registrar handlers de evento para montar el servidor cuando se conectan el Wi-Di o Ethernet, y parar cuando se desconecta.
@@ -1650,10 +1638,11 @@ void app_main(void)
      */
     while (1)
     {
+
         if (gpio_get_level(PIN_SWITCH))
         {
             ESP_LOGI(TAG, "Switch display: ON");
-            s_switch_state = true; // Este estado se usa para encender o apagar el LCD TO-DO El que se encargue del I2C que meta esto.
+            s_switch_state = true;
             ssd1306_contrast(&dev, 0xff);
             sprintf(primeralineChar, " Tox pre: %02d", datoI2CCO2legible);
             sprintf(segundalineChar, " Tox pos: %02d", datoI2CFotonlegible);
@@ -1736,19 +1725,18 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(2000)); // Delays para asegurar lecturas ADC correctas
 
         /* Read the register, on power up the register should have the value 0xB5 */
-        // ESP_LOGI(TAG, "Procedo a leer I2C de CO2"); // TO-DO REEMPLAZAR CON EL OTRO SENSOR
+        // ESP_LOGI(TAG, "Procedo a leer I2C de CO2"); // Se reemplazó por el sensor TempHum
         // ESP_ERROR_CHECK(register_read(CO2_SENSOR_ADDR, CO2_REG_ADDR, 9));
-        ESP_LOGI(TAG, "Procedo a leer I2C de TempHum"); // TO-DO REEMPLAZAR CON EL OTRO SENSOR
+        ESP_LOGI(TAG, "Procedo a leer I2C de TempHum");
         ESP_ERROR_CHECK(tempHum_register_read(TEMPHUM_SENSOR_ADDR, COMANDO_TEMPHUM_MSB, COMANDO_TEMPHUM_LSB, 6));
         ESP_LOGI(TAG, "Procedo a leer I2C de Luminosidad");
         ESP_ERROR_CHECK(register_read_commando(LUZ_SENSOR_ADDR, LUZ_REG_ADDR, 2));
 
         vTaskDelay(pdMS_TO_TICKS(1000)); // El I2C puede tardar hasta 11 segundos
 
-        if (contadorAdormir > 15)
+        if (sleepEnabled && contadorAdormir > 15)
         {
             // Hora de dormir para ahorrar energía. Debe ser light sleep y no hacerse todo el rato para no hacer disrupción excesiva en las comunicaciones.
-            // TO-DO Light sleep de varios segundos por RTC? AJUSTAR A LIGHT SLEEP
             esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000); 
             printf("Entering light sleep\n");
 
@@ -1770,33 +1758,7 @@ void app_main(void)
             int64_t t_after_us = esp_timer_get_time();
 
             /* Determine wake up reason */
-            const char *wakeup_reason;
-            switch (esp_sleep_get_wakeup_cause())
-            {
-            case ESP_SLEEP_WAKEUP_TIMER:
-                wakeup_reason = "timer";
-                break;
-            case ESP_SLEEP_WAKEUP_GPIO:
-                wakeup_reason = "pin";
-                break;
-            case ESP_SLEEP_WAKEUP_UART:
-                wakeup_reason = "uart";
-                /* Hang-up for a while to switch and execuse the uart task
-                 * Otherwise the chip may fall sleep again before running uart task */
-                vTaskDelay(1);
-                break;
-#if CONFIG_IDF_TARGET_ESP32S2 || CONFIG_IDF_TARGET_ESP32S3
-            case ESP_SLEEP_WAKEUP_TOUCHPAD:
-                wakeup_reason = "touch";
-                break;
-#endif
-            default:
-                wakeup_reason = "other";
-                break;
-            }
-            printf("Returned from light sleep, reason: %s, t=%lld ms, slept for %lld ms\n",
-                   wakeup_reason, t_after_us / 1000, (t_after_us - t_before_us) / 1000);
-
+            deQueMeLevante((t_after_us - t_before_us) / 1000);
             vTaskDelay(pdMS_TO_TICKS(5000)); // Tras el sleep el wifi está caído, hay que darle tiempo para recuperarse
             
             contadorAdormir = 0;
@@ -1806,7 +1768,7 @@ void app_main(void)
             *MQTT: los datos obtenidos los mandamos a Thingsboard
             */
             mqtt_app_start();
-            contadorAdormir++;
+            if (sleepEnabled) contadorAdormir++;
         }
 
     }

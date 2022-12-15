@@ -2164,6 +2164,16 @@
                 "range": null,
                 "title": "Enable wakeup from GPIO",
                 "type": "bool"
+            },
+            {
+                "children": [],
+                "depends_on": null,
+                "help": "This option enables light sleep",
+                "id": "LIGHT_SLEEP_ENABLED",
+                "name": "LIGHT_SLEEP_ENABLED",
+                "range": null,
+                "title": "Enable wakeup from GPIO",
+                "type": "bool"
             }
         ],
         "depends_on": null,

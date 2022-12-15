@@ -250,7 +250,7 @@ int sh2lib_connect(struct sh2lib_config_t *cfg, struct sh2lib_handle *hd)
         .cacert_buf = cfg->cacert_buf,
         .cacert_bytes = cfg->cacert_bytes,
         .non_block = true,
-        .timeout_ms = 5 * 1000, // 10 * 1000
+        .timeout_ms = 10 * 1000, // 10 * 1000
     };
     if ((hd->http2_tls = esp_tls_conn_http_new(cfg->uri, &tls_cfg)) == NULL) {
         ESP_LOGE(TAG, "[sh2-connect] esp-tls connection failed");
